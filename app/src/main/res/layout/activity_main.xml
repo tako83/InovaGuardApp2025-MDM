@@ -1,0 +1,288 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#1E2741"
+    android:fillViewport="true"
+    tools:context=".MainActivity">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="24dp">
+
+        <!-- Pantalla de Dispositivo Bloqueado -->
+        <LinearLayout
+            android:id="@+id/locked_layout"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="24dp"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintWidth_max="400dp"
+            app:layout_constraintVertical_bias="0.5">
+
+            <ImageView
+                android:id="@+id/logo_image_view"
+                android:layout_width="150dp"
+                android:layout_height="150dp"
+                android:src="@drawable/inova_guard_logo"
+                android:contentDescription="InovaGuard Logo"
+                android:layout_marginBottom="32dp"/>
+
+            <TextView
+                android:id="@+id/locked_message_text_view"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Dispositivo Bloqueado"
+                android:textColor="@android:color/white"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Por favor, contacte a la administración para desbloquear su dispositivo."
+                android:textColor="#CCCCCC"
+                android:textSize="16sp"
+                android:textAlignment="center"
+                android:layout_marginBottom="24dp"/>
+
+            <EditText
+                android:id="@+id/unlock_code_edit_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Introduce código de 6 dígitos"
+                android:textColorHint="#999999"
+                android:textColor="@android:color/white"
+                android:background="@drawable/rounded_edittext_background"
+                android:padding="12dp"
+                android:inputType="number"
+                android:maxLength="6"
+                android:gravity="center"
+                android:layout_marginBottom="16dp"/>
+
+            <Button
+                android:id="@+id/unlock_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="DESBLOQUEAR"
+                android:background="@drawable/rounded_purple_button"
+                android:textColor="@android:color/white"
+                android:textStyle="bold"
+                android:padding="12dp"
+                android:layout_marginBottom="16dp"/>
+
+            <TextView
+                android:id="@+id/incorrect_code_text_view"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Código incorrecto, intente de nuevo."
+                android:textColor="#FF6347"
+                android:textSize="14sp"
+                android:visibility="gone"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:id="@+id/contact_phone_text_view"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Teléfono: +58 412 1234567"
+                android:textColor="#ADD8E6"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:padding="8dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="@drawable/rounded_phone_background"/>
+
+        </LinearLayout>
+
+        <!-- Pantalla Principal / Recordatorio de Pago -->
+        <LinearLayout
+            android:id="@+id/main_layout"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:padding="24dp"
+            android:visibility="visible"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintWidth_max="400dp"
+            app:layout_constraintVertical_bias="0.5">
+
+            <ImageView
+                android:id="@+id/main_logo_image_view"
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:src="@drawable/inova_guard_logo"
+                android:contentDescription="InovaGuard Logo"
+                android:layout_marginBottom="24dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="¡Recordatorio de Pago!"
+                android:textColor="@android:color/white"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:background="@drawable/rounded_title_background"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:layout_marginBottom="16dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Tu próximo pago debe realizarse pronto para mantener tu servicio activo."
+                android:textColor="#CCCCCC"
+                android:textSize="15sp"
+                android:textAlignment="center"
+                android:padding="8dp"
+                android:background="@drawable/rounded_card_background"
+                android:layout_marginBottom="24dp"/>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/rounded_card_background"
+                android:padding="16dp"
+                android:layout_marginBottom="24dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textStyle="bold"
+                        android:textColor="@android:color/white"
+                        android:text="Próxima Fecha de Pago:"/>
+                    <TextView
+                        android:id="@+id/next_payment_date_text_view"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textColor="#ADD8E6"
+                        android:text="31/12/2025"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textStyle="bold"
+                        android:textColor="@android:color/white"
+                        android:text="Monto Adeudado:"/>
+                    <TextView
+                        android:id="@+id/amount_due_text_view"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textColor="#ADD8E6"
+                        android:text="$.--"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textStyle="bold"
+                        android:textColor="@android:color/white"
+                        android:text="Monto Pagado:"/>
+                    <TextView
+                        android:id="@+id/amount_paid_text_view"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textColor="#ADD8E6"
+                        android:text="$.--"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textStyle="bold"
+                        android:textColor="@android:color/white"
+                        android:text="Dispositivo:"/>
+                    <TextView
+                        android:id="@+id/device_info_text_view"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textColor="#ADD8E6"
+                        android:text="Marca Modelo"/>
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textStyle="bold"
+                    android:textColor="@android:color/white"
+                    android:layout_marginBottom="4dp"
+                    android:text="Instrucciones de Pago:"/>
+                <TextView
+                    android:id="@+id/payment_instructions_text_view"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="#ADD8E6"
+                    android:text="Contacte a la administración para más detalles."/>
+
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/contact_admin_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="CONTACTAR ADMINISTRACIÓN"
+                android:background="@drawable/rounded_blue_button"
+                android:textColor="@android:color/white"
+                android:textStyle="bold"
+                android:padding="12dp"
+                android:layout_marginBottom="16dp"/>
+
+            <TextView
+                android:id="@+id/contact_phone_main_text_view"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Teléfono: N/A"
+                android:textColor="#CCCCCC"
+                android:textSize="14sp" />
+
+        </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</ScrollView>
