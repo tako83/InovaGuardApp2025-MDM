@@ -19,7 +19,12 @@ public class Constants {
     public static final String PREF_DEVICE_MODEL = "deviceModel";
     public static final String PREF_PAYMENT_INSTRUCTIONS = "paymentInstructions";
 
+    // Nuevas variables añadidas para la información del servidor
+    public static final String PREF_MESSAGE = "message";
+    public static final String PREF_COMPANY_LOGO_URL = "companyLogoUrl";
+
     // Intervalos y umbrales (en milisegundos y minutos)
     public static final long CONNECTION_CHECK_INTERVAL = 15 * 60 * 1000; // 15 minutos
-    public static final long LOCK_THRESHOLD_MINUTES = 48 * 60; // 48 horas sin conexión
+    public static final long LOCK_THRESHOLD_MINUTES = 60 * 24 * 7; // 7 días de desconexión
+
 }

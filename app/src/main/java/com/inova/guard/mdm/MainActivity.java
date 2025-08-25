@@ -44,8 +44,6 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
     private static final int REQUEST_CODE_ENABLE_ADMIN = 1;
-
-    // Vistas de la pantalla de bloqueo
     private View lockedLayout;
     private ImageView logoImageView;
     private TextView lockedMessageTextView;
@@ -53,8 +51,6 @@ public class MainActivity extends AppCompatActivity {
     private Button unlockButton;
     private TextView incorrectCodeTextView;
     private TextView contactPhoneTextView;
-
-
     private View mainLayout;
     private TextView nextPaymentDateTextView;
     private TextView amountDueTextView;
@@ -63,7 +59,6 @@ public class MainActivity extends AppCompatActivity {
     private TextView paymentInstructionsTextView;
     private Button contactAdminButton;
     private TextView contactPhoneMainTextView;
-
     private DevicePolicyManager devicePolicyManager;
     private ComponentName adminComponentName;
     private SharedPreferences sharedPreferences;
