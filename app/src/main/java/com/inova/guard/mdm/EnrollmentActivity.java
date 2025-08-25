@@ -46,7 +46,6 @@ public class EnrollmentActivity extends AppCompatActivity {
     private EditText etSerialNumber;
     private EditText etDeviceType;
     private EditText etDeviceBrandModel;
-
     // AÑADIDO: Nuevos campos para el cliente
     private EditText etClientName;
     private EditText etClientEmail;
@@ -62,7 +61,6 @@ public class EnrollmentActivity extends AppCompatActivity {
 
         btnActivateAdmin = findViewById(R.id.btn_activate_admin);
         btnEnroll = findViewById(R.id.btn_enroll);
-
         etSerialNumber = findViewById(R.id.et_serial);
         etDeviceType = findViewById(R.id.et_device_type);
         etDeviceBrandModel = findViewById(R.id.et_device_brand_model);
@@ -202,7 +200,6 @@ public class EnrollmentActivity extends AppCompatActivity {
                                     .putString(Constants.PREF_SERIAL_NUMBER, serialText)
                                     .putString(Constants.PREF_CONTACT_PHONE, contactPhone)
                                     .apply();
-
                             Intent serviceIntent = new Intent(EnrollmentActivity.this, MdmService.class);
                             startService(serviceIntent);
 
@@ -222,7 +219,6 @@ public class EnrollmentActivity extends AppCompatActivity {
                     runOnUiThread(() -> Toast.makeText(EnrollmentActivity.this, "Error de conexión: " + errorMessage, Toast.LENGTH_LONG).show());
                 }
             });
-
         } catch (Exception e) {
             Log.e(TAG, "Error durante el enrolamiento: " + e.getMessage());
             Toast.makeText(this, "Error al obtener información del dispositivo.", Toast.LENGTH_LONG).show();

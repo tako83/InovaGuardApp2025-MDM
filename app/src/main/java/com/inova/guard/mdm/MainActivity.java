@@ -72,6 +72,9 @@ public class MainActivity extends AppCompatActivity {
         sharedPreferences = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE);
         String deviceId = sharedPreferences.getString(Constants.PREF_DEVICE_ID, null);
 
+        // Verifica si la app fue lanzada para mostrar un recordatorio de pago
+        boolean showPaymentReminder = getIntent().getBooleanExtra(Constants.EXTRA_SHOW_PAYMENT_REMINDER, false);
+
         if (deviceId == null || deviceId.isEmpty()) {
             Log.d(TAG, "Device not enrolled. Redirecting to EnrollmentActivity.");
             Intent enrollmentIntent = new Intent(this, EnrollmentActivity.class);
@@ -80,7 +83,24 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        setContentView(R.layout.activity_main);
+        // Si la app está en modo de recordatorio de pago, no se cierra y continúa
+        if (showPaymentReminder) {
+            setContentView(R.layout.activity_main);
+        } else {
+            // Lógica para el caso de no ser un recordatorio
+            boolean isDeviceLocked = sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false);
+            if (!isDeviceLocked) {
+                Log.d(TAG, "Device enrolled and not locked. Closing MainActivity to return to home screen.");
+                finish();
+                return;
+            }
+            setContentView(R.layout.activity_main);
+        }
+
+        if (!MdmService.isRunning) {
+            Intent serviceIntent = new Intent(this, MdmService.class);
+            startService(serviceIntent);
+        }
 
         lockedLayout = findViewById(R.id.locked_layout);
         logoImageView = findViewById(R.id.logo_image_view);
@@ -101,11 +121,6 @@ public class MainActivity extends AppCompatActivity {
 
         devicePolicyManager = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
         adminComponentName = new ComponentName(this, DeviceAdminReceiver.class);
-
-        if (!MdmService.isRunning) {
-            Intent serviceIntent = new Intent(this, MdmService.class);
-            startService(serviceIntent);
-        }
 
         unlockButton.setOnClickListener(v -> attemptUnlock());
 
@@ -177,25 +192,30 @@ public class MainActivity extends AppCompatActivity {
 
     private void checkDeviceStatus() {
         boolean isDeviceLocked = sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false);
-        showScreen(isDeviceLocked);
+        boolean showPaymentReminder = getIntent().getBooleanExtra(Constants.EXTRA_SHOW_PAYMENT_REMINDER, false);
 
         if (isDeviceLocked) {
+            showScreen(true);
             String contactNumber = sharedPreferences.getString(Constants.PREF_CONTACT_PHONE, "+58 412 1234567");
             contactPhoneTextView.setText("Teléfono: " + contactNumber);
             incorrectCodeTextView.setVisibility(View.GONE);
             unlockCodeEditText.setText("");
+        } else if (showPaymentReminder) {
+            showScreen(false);
+            updatePaymentInfo();
         } else {
+            showScreen(false);
             updatePaymentInfo();
         }
     }
 
     private void updatePaymentInfo() {
-        String nextPaymentDate = sharedPreferences.getString(Constants.PREF_NEXT_PAYMENT_DATE, "31/12/2025");
-        String amountDue = sharedPreferences.getString(Constants.PREF_AMOUNT_DUE, "$0.00");
-        String amountPaid = sharedPreferences.getString(Constants.PREF_AMOUNT_PAID, "$0.00");
-        String deviceBrand = sharedPreferences.getString(Constants.PREF_DEVICE_BRAND, "Marca");
-        String deviceModel = sharedPreferences.getString(Constants.PREF_DEVICE_MODEL, "Modelo");
-        String paymentInstructions = sharedPreferences.getString(Constants.PREF_PAYMENT_INSTRUCTIONS, "Contacte a la administración para más detalles.");
+        String nextPaymentDate = sharedPreferences.getString(Constants.PREF_NEXT_PAYMENT_DATE, "N/A");
+        String amountDue = sharedPreferences.getString(Constants.PREF_AMOUNT_DUE, "N/A");
+        String amountPaid = sharedPreferences.getString(Constants.PREF_AMOUNT_PAID, "N/A");
+        String deviceBrand = sharedPreferences.getString(Constants.PREF_DEVICE_BRAND, "N/A");
+        String deviceModel = sharedPreferences.getString(Constants.PREF_DEVICE_MODEL, "N/A");
+        String paymentInstructions = sharedPreferences.getString(Constants.PREF_PAYMENT_INSTRUCTIONS, "N/A");
         String contactNumber = sharedPreferences.getString(Constants.PREF_CONTACT_PHONE, "N/A");
 
         nextPaymentDateTextView.setText(nextPaymentDate);
@@ -230,6 +250,7 @@ public class MainActivity extends AppCompatActivity {
                             showScreen(false);
                             Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
                             incorrectCodeTextView.setVisibility(View.GONE);
+                            finish();
                         });
                     } else {
                         runOnUiThread(() -> {
