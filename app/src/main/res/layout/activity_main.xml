@@ -13,7 +13,6 @@
         android:layout_height="wrap_content"
         android:padding="24dp">
 
-        <!-- Pantalla de Dispositivo Bloqueado -->
         <LinearLayout
             android:id="@+id/locked_layout"
             android:layout_width="0dp"
@@ -106,7 +105,6 @@
 
         </LinearLayout>
 
-        <!-- Pantalla Principal / Recordatorio de Pago -->
         <LinearLayout
             android:id="@+id/main_layout"
             android:layout_width="0dp"

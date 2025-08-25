@@ -32,16 +32,16 @@ import com.inova.guard.mdm.utils.Constants;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.IOException; // ¡Asegúrate de que esta importación esté presente!
+import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
-import okhttp3.Call; // ¡Asegúrate de que esta importación esté presente!
+import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
-import okhttp3.Response; // ¡Asegúrate de que esta importación esté presente!
+import okhttp3.Response;
 
 public class MdmService extends Service {
 
@@ -125,6 +125,15 @@ public class MdmService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d(TAG, "MdmService onStartCommand");
+
+        // Lógica crucial: Si no hay un número de serie, salimos del servicio.
+        String serialNumber = sharedPreferences.getString(Constants.PREF_SERIAL_NUMBER, null);
+        if (serialNumber == null || serialNumber.isEmpty() || "unknown".equals(serialNumber)) {
+            Log.e(TAG, "No se encontró el serial del dispositivo. El servicio no se ejecutará.");
+            stopSelf(); // Detenemos el servicio para evitar un bucle de errores
+            return START_NOT_STICKY;
+        }
+
         handler.post(connectivityRunnable);
         reportDeviceStatus(true);
         return START_STICKY;
@@ -150,6 +159,7 @@ public class MdmService extends Service {
 
         boolean isLockedPref = sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false);
 
+        // La lógica de bloqueo por falta de conexión se mantiene sin cambios
         if (minutesWithoutConnection >= Constants.LOCK_THRESHOLD_MINUTES && !isLockedPref) {
             Log.d(TAG, "Umbral de desconexión alcanzado. Bloqueando dispositivo.");
             lockDevice();
@@ -180,6 +190,10 @@ public class MdmService extends Service {
                             .putString(Constants.PREF_CONTACT_PHONE, contactPhone)
                             .apply();
 
+                    if (devicePolicyManager.isAdminActive(adminComponentName)) {
+                        devicePolicyManager.lockNow();
+                    }
+
                     Intent lockIntent = new Intent(MdmService.this, MainActivity.class);
                     lockIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                     startActivity(lockIntent);
@@ -194,9 +208,14 @@ public class MdmService extends Service {
             }
 
             @Override
-            public void onFailure(String errorMessage) { // ¡Firma corregida aquí!
+            public void onFailure(String errorMessage) {
                 Log.e(TAG, "Error al llamar a la API de bloqueo: " + errorMessage);
                 sharedPreferences.edit().putBoolean(Constants.PREF_IS_LOCKED, true).apply();
+
+                if (devicePolicyManager.isAdminActive(adminComponentName)) {
+                    devicePolicyManager.lockNow();
+                }
+
                 Intent lockIntent = new Intent(MdmService.this, MainActivity.class);
                 lockIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                 startActivity(lockIntent);
@@ -206,12 +225,15 @@ public class MdmService extends Service {
 
     private void reportDeviceStatus(boolean isOnline) {
         String serialNumber = sharedPreferences.getString(Constants.PREF_SERIAL_NUMBER, "unknown");
-        ApiUtils.checkDeviceStatus(this, serialNumber, isOnline, new ApiUtils.ApiCallback() { // ¡checkDeviceStatus aquí!
+        ApiUtils.checkDeviceStatus(this, serialNumber, isOnline, new ApiUtils.ApiCallback() {
             @Override
             public void onSuccess(String response) {
                 try {
                     JSONObject jsonResponse = new JSONObject(response);
-                    String status = jsonResponse.getString("status");
+                    // CAMBIO CLAVE: Leer el valor booleano 'is_locked' del JSON
+                    boolean isLockedByAdmin = jsonResponse.getBoolean("is_locked");
+
+                    // No todos los endpoints de status devuelven estos valores, por lo que los hacemos opcionales
                     String unlockCode = jsonResponse.optString("unlock_code", "");
                     String message = jsonResponse.optString("message", "");
                     String contactPhone = jsonResponse.optString("contact_phone", "+58 412 1234567");
@@ -236,22 +258,24 @@ public class MdmService extends Service {
                     editor.putString(Constants.PREF_DEVICE_MODEL, deviceModelInfo);
                     editor.apply();
 
-                    if ("locked".equals(status)) {
-                        if (!sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false)) {
-                            Log.d(TAG, "Servidor indica bloqueado, forzando bloqueo local.");
-                            editor.putBoolean(Constants.PREF_IS_LOCKED, true).apply();
-                            Intent lockIntent = new Intent(MdmService.this, MainActivity.class);
-                            lockIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                            startActivity(lockIntent);
+                    // Lógica para bloquear/desbloquear basada en el estado del servidor
+                    if (isLockedByAdmin && !sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false)) {
+                        Log.d(TAG, "Servidor indica bloqueado, forzando bloqueo local.");
+                        editor.putBoolean(Constants.PREF_IS_LOCKED, true).apply();
+                        if (devicePolicyManager.isAdminActive(adminComponentName)) {
+                            devicePolicyManager.lockNow();
                         }
-                    } else if ("unlocked".equals(status)) {
-                        if (sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false)) {
-                            Log.d(TAG, "Servidor indica desbloqueado, forzando desbloqueo local.");
-                            editor.putBoolean(Constants.PREF_IS_LOCKED, false).apply();
-                            Intent unlockIntent = new Intent(MdmService.this, MainActivity.class);
-                            unlockIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                            startActivity(unlockIntent);
-                        }
+                        Intent lockIntent = new Intent(MdmService.this, MainActivity.class);
+                        lockIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                        startActivity(lockIntent);
+
+                    } else if (!isLockedByAdmin && sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false)) {
+                        Log.d(TAG, "Servidor indica desbloqueado, forzando desbloqueo local.");
+                        editor.putBoolean(Constants.PREF_IS_LOCKED, false).apply();
+                        // Este es el intent que lanza la MainActivity y desencadena el showScreen(false)
+                        Intent unlockIntent = new Intent(MdmService.this, MainActivity.class);
+                        unlockIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                        startActivity(unlockIntent);
                     }
                     Log.d(TAG, "Estado de conectividad reportado y info actualizada: " + response);
 
@@ -261,9 +285,10 @@ public class MdmService extends Service {
             }
 
             @Override
-            public void onFailure(String errorMessage) { // ¡Firma corregida aquí!
+            public void onFailure(String errorMessage) {
                 Log.e(TAG, "Fallo al reportar el estado de conectividad: " + errorMessage);
-                lastConnectedTime = System.currentTimeMillis() - (Constants.LOCK_THRESHOLD_MINUTES * 60 * 1000) - 1;
+                // Si falla la conexión, la lógica de desconexión manejará el bloqueo
+                // No es necesario modificar el lastConnectedTime aquí, ya que el ConnectivityReceiver lo hará.
             }
         });
     }
