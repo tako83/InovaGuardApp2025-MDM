@@ -1,10 +1,7 @@
 package com.inova.guard.mdm.utils;
 
 public class Constants {
-    // URL de tu servidor (la que me proporcionaste)
     public static final String BASE_URL = "http://10.0.2.2:8000";
-
-    // SharedPreferences
     public static final String PREFS_NAME = "InovaGuardMdmPrefs";
     public static final String PREF_IS_ENROLLED = "isEnrolled";
     public static final String PREF_DEVICE_ID = "deviceId";
@@ -18,13 +15,13 @@ public class Constants {
     public static final String PREF_DEVICE_BRAND = "deviceBrand";
     public static final String PREF_DEVICE_MODEL = "deviceModel";
     public static final String PREF_PAYMENT_INSTRUCTIONS = "paymentInstructions";
-
-    // Nuevas variables añadidas para la información del servidor
     public static final String PREF_MESSAGE = "message";
     public static final String PREF_COMPANY_LOGO_URL = "companyLogoUrl";
 
-    // Intervalos y umbrales (en milisegundos y minutos)
-    public static final long CONNECTION_CHECK_INTERVAL = 15 * 60 * 1000; // 15 minutos
-    public static final long LOCK_THRESHOLD_MINUTES = 60 * 24 * 7; // 7 días de desconexión
+    public static final long CONNECTION_CHECK_INTERVAL = 15 * 60 * 1000;
+    public static final long LOCK_THRESHOLD_MINUTES = 60 * 24 * 7;
+
+    public static final int PAYMENT_REMINDER_THRESHOLD_DAYS = 5;
+    public static final String EXTRA_SHOW_PAYMENT_REMINDER = "showPaymentReminder";
 
 }

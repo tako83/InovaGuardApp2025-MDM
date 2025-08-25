@@ -32,7 +32,6 @@ android {
 }
 
 dependencies {
-
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.activity)
@@ -43,5 +42,6 @@ dependencies {
 
     implementation(libs.okhttp)
     implementation(libs.glide)
-    annotationProcessor(libs.glide.compiler) // ¡Asegúrate de que esta línea esté presente!
+    annotationProcessor(libs.glide.compiler)
+    implementation("com.google.android.gms:play-services-location:21.0.1")
 }
