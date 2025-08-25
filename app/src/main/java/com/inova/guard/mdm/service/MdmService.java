@@ -49,7 +49,6 @@ public class MdmService extends Service {
     public static boolean isRunning = false;
     private static final String CHANNEL_ID = "InovaGuardMDM_Channel";
     private static final int NOTIFICATION_ID = 123;
-
     private Handler handler;
     private Runnable connectivityRunnable;
     private long lastConnectedTime;
@@ -126,11 +125,10 @@ public class MdmService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d(TAG, "MdmService onStartCommand");
 
-        // Lógica crucial: Si no hay un número de serie, salimos del servicio.
         String serialNumber = sharedPreferences.getString(Constants.PREF_SERIAL_NUMBER, null);
         if (serialNumber == null || serialNumber.isEmpty() || "unknown".equals(serialNumber)) {
             Log.e(TAG, "No se encontró el serial del dispositivo. El servicio no se ejecutará.");
-            stopSelf(); // Detenemos el servicio para evitar un bucle de errores
+            stopSelf();
             return START_NOT_STICKY;
         }
 
@@ -159,7 +157,6 @@ public class MdmService extends Service {
 
         boolean isLockedPref = sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false);
 
-        // La lógica de bloqueo por falta de conexión se mantiene sin cambios
         if (minutesWithoutConnection >= Constants.LOCK_THRESHOLD_MINUTES && !isLockedPref) {
             Log.d(TAG, "Umbral de desconexión alcanzado. Bloqueando dispositivo.");
             lockDevice();
@@ -230,10 +227,8 @@ public class MdmService extends Service {
             public void onSuccess(String response) {
                 try {
                     JSONObject jsonResponse = new JSONObject(response);
-                    // CAMBIO CLAVE: Leer el valor booleano 'is_locked' del JSON
                     boolean isLockedByAdmin = jsonResponse.getBoolean("is_locked");
 
-                    // No todos los endpoints de status devuelven estos valores, por lo que los hacemos opcionales
                     String unlockCode = jsonResponse.optString("unlock_code", "");
                     String message = jsonResponse.optString("message", "");
                     String contactPhone = jsonResponse.optString("contact_phone", "+58 412 1234567");
@@ -258,7 +253,6 @@ public class MdmService extends Service {
                     editor.putString(Constants.PREF_DEVICE_MODEL, deviceModelInfo);
                     editor.apply();
 
-                    // Lógica para bloquear/desbloquear basada en el estado del servidor
                     if (isLockedByAdmin && !sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false)) {
                         Log.d(TAG, "Servidor indica bloqueado, forzando bloqueo local.");
                         editor.putBoolean(Constants.PREF_IS_LOCKED, true).apply();
@@ -272,7 +266,6 @@ public class MdmService extends Service {
                     } else if (!isLockedByAdmin && sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false)) {
                         Log.d(TAG, "Servidor indica desbloqueado, forzando desbloqueo local.");
                         editor.putBoolean(Constants.PREF_IS_LOCKED, false).apply();
-                        // Este es el intent que lanza la MainActivity y desencadena el showScreen(false)
                         Intent unlockIntent = new Intent(MdmService.this, MainActivity.class);
                         unlockIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                         startActivity(unlockIntent);
@@ -287,8 +280,6 @@ public class MdmService extends Service {
             @Override
             public void onFailure(String errorMessage) {
                 Log.e(TAG, "Fallo al reportar el estado de conectividad: " + errorMessage);
-                // Si falla la conexión, la lógica de desconexión manejará el bloqueo
-                // No es necesario modificar el lastConnectedTime aquí, ya que el ConnectivityReceiver lo hará.
             }
         });
     }
