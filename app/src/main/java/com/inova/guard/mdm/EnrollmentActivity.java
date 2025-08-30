@@ -46,7 +46,6 @@ public class EnrollmentActivity extends AppCompatActivity {
     private EditText etSerialNumber;
     private EditText etDeviceType;
     private EditText etDeviceBrandModel;
-    // AÑADIDO: Nuevos campos para el cliente
     private EditText etClientName;
     private EditText etClientEmail;
 
@@ -65,7 +64,6 @@ public class EnrollmentActivity extends AppCompatActivity {
         etDeviceType = findViewById(R.id.et_device_type);
         etDeviceBrandModel = findViewById(R.id.et_device_brand_model);
 
-        // AÑADIDO: Inicializar los nuevos campos del cliente
         etClientName = findViewById(R.id.et_client_name);
         etClientEmail = findViewById(R.id.et_client_email);
 
@@ -129,21 +127,49 @@ public class EnrollmentActivity extends AppCompatActivity {
             return;
         }
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "Permiso de teléfono no concedido. No se puede enrolar.", Toast.LENGTH_LONG).show();
-            return;
+        final String[] deviceIdentifier = {null};
+        final String[] identifierType = {null};
+
+        // Valores por defecto
+        String imei = "unknown";
+        String serialNumber = Build.SERIAL;
+
+        // Lógica condicional para asignar el identificador principal
+        if (devicePolicyManager.isDeviceOwnerApp(getPackageName())) {
+            // Escenario 1: Device Owner (se usa IMEI)
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Permiso de teléfono no concedido. No se puede enrolar con IMEI.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            imei = getImei();
+            deviceIdentifier[0] = imei;
+            identifierType[0] = "imei";
+            Log.d(TAG, "Enrolamiento como Device Owner. Usando IMEI: " + deviceIdentifier[0]);
+        } else {
+            // Escenario 2: Device Admin (se usa serial)
+            deviceIdentifier[0] = serialNumber;
+            identifierType[0] = "serial_number";
+            Log.d(TAG, "Enrolamiento como Device Admin. Usando número de serie: " + deviceIdentifier[0]);
         }
 
-        String serialText = etSerialNumber.getText().toString().trim();
+        // Si el identificador es 'unknown' o 'undefined', usar el serial del UI o un UUID de fallback
+        if ("unknown".equals(deviceIdentifier[0]) || "undefined".equals(deviceIdentifier[0])) {
+            String manualSerial = etSerialNumber.getText().toString().trim();
+            if (!manualSerial.isEmpty()) {
+                deviceIdentifier[0] = manualSerial;
+                Log.d(TAG, "Identificador del dispositivo no disponible. Usando el serial del UI: " + deviceIdentifier[0]);
+            } else {
+                deviceIdentifier[0] = "EMULATOR_" + UUID.randomUUID().toString();
+                Log.d(TAG, "Identificador no disponible y serial del UI vacío. Usando un UUID temporal: " + deviceIdentifier[0]);
+            }
+        }
+
         String typeText = etDeviceType.getText().toString().trim();
         String brandModelText = etDeviceBrandModel.getText().toString().trim();
-
-        // AÑADIDO: Obtener los datos del cliente
         String clientName = etClientName.getText().toString().trim();
         String clientEmail = etClientEmail.getText().toString().trim();
 
-        // AÑADIDO: Lógica de validación para los nuevos campos
-        if (serialText.isEmpty() || typeText.isEmpty() || brandModelText.isEmpty() || clientName.isEmpty() || clientEmail.isEmpty()) {
+        if (typeText.isEmpty() || brandModelText.isEmpty() || clientName.isEmpty() || clientEmail.isEmpty()) {
             Toast.makeText(this, "Todos los campos son obligatorios.", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -151,7 +177,6 @@ public class EnrollmentActivity extends AppCompatActivity {
         String brand = "";
         String modelName = "";
         String[] parts = brandModelText.split(" ", 2);
-
         if (parts.length >= 1) {
             brand = parts[0];
         }
@@ -161,19 +186,19 @@ public class EnrollmentActivity extends AppCompatActivity {
 
         try {
             JSONObject deviceData = new JSONObject();
-            // deviceData.put("device_id", UUID.randomUUID().toString()); // ELIMINE ESTA LÍNEA
-            deviceData.put("serial_number", serialText);
+            // Siempre enviar ambos campos al servidor
+            deviceData.put("imei", imei);
+            deviceData.put("serial_number", serialNumber);
+
+            // También enviar el identificador principal para retrocompatibilidad si el servidor lo necesita
+            deviceData.put(identifierType[0], deviceIdentifier[0]);
+
             deviceData.put("device_type", typeText);
             deviceData.put("brand", brand);
             deviceData.put("model_name", modelName);
-            deviceData.put("imei", getImei());
-
-            // AÑADIDO: Incluir la información del cliente
             deviceData.put("client_name", clientName);
             deviceData.put("client_email", clientEmail);
-            deviceData.put("contact_phone", ""); // Es posible que su app envíe el número del cliente aquí
-
-            // AÑADIDO: Campos adicionales para compatibilidad con el serializador
+            deviceData.put("contact_phone", "");
             deviceData.put("company_logo_url", "");
             deviceData.put("unlock_code", "");
             deviceData.put("message", "");
@@ -197,7 +222,7 @@ public class EnrollmentActivity extends AppCompatActivity {
                             sharedPreferences.edit()
                                     .putBoolean(Constants.PREF_IS_ENROLLED, true)
                                     .putString(Constants.PREF_DEVICE_ID, deviceId)
-                                    .putString(Constants.PREF_SERIAL_NUMBER, serialText)
+                                    .putString(Constants.PREF_SERIAL_NUMBER, deviceIdentifier[0])
                                     .putString(Constants.PREF_CONTACT_PHONE, contactPhone)
                                     .apply();
                             Intent serviceIntent = new Intent(EnrollmentActivity.this, MdmService.class);
