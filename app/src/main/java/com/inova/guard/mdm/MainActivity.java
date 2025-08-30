@@ -141,19 +141,24 @@ public class MainActivity extends AppCompatActivity {
 
         if (devicePolicyManager != null && adminComponentName != null && devicePolicyManager.isAdminActive(adminComponentName)) {
             Log.d(TAG, "Device Admin is active. Attempting to restrict settings.");
+            // Esto solo se hace si el app es Device Owner. Si es solo admin, no se puede hacer.
+            if (isDeviceOwner()) {
+                devicePolicyManager.setLockTaskPackages(adminComponentName, new String[]{getPackageName()});
+            }
         } else {
             Log.w(TAG, "Device Admin is not active. App may be easily uninstalled.");
-        }
-
-        if (isDeviceOwner()) {
-            Log.d(TAG, "Running in Device Owner mode. App can be set as Kiosk.");
-            devicePolicyManager.setLockTaskPackages(adminComponentName, new String[]{getPackageName()});
         }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        // ✅ CORRECCIÓN CLAVE: Iniciar el bloqueo de tareas si el dispositivo está bloqueado al reanudar la actividad.
+        // Esto asegura que, incluso si el usuario sale brevemente y regresa, el bloqueo se active.
+        boolean isDeviceLocked = sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false);
+        if (isDeviceLocked) {
+            startLockTask();
+        }
         checkDeviceStatus();
         handler.post(checkConnectionRunnable);
     }
@@ -169,9 +174,17 @@ public class MainActivity extends AppCompatActivity {
             lockedLayout.setVisibility(View.VISIBLE);
             mainLayout.setVisibility(View.GONE);
             Glide.with(this).load(R.drawable.inova_guard_logo).into(logoImageView);
+
+            // ✅ Mantenemos la lógica de bloqueo aquí, aunque también se activa en onResume()
+            // para mayor redundancia y fiabilidad.
+            startLockTask();
+
         } else {
             lockedLayout.setVisibility(View.GONE);
             mainLayout.setVisibility(View.VISIBLE);
+
+            // ✅ Detén el modo de bloqueo de tareas.
+            stopLockTask();
         }
     }
 
@@ -227,7 +240,7 @@ public class MainActivity extends AppCompatActivity {
                     if (success) {
                         sharedPreferences.edit().putBoolean(Constants.PREF_IS_LOCKED, false).apply();
                         runOnUiThread(() -> {
-                            showScreen(false);
+                            unlockDevice();
                             Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
                             incorrectCodeTextView.setVisibility(View.GONE);
                         });
@@ -262,9 +275,6 @@ public class MainActivity extends AppCompatActivity {
             sharedPreferences.edit().putBoolean(Constants.PREF_IS_LOCKED, true).apply();
             showScreen(true);
             Toast.makeText(this, "Dispositivo bloqueado por falta de pago.", Toast.LENGTH_LONG).show();
-            if (isDeviceOwner()) {
-                startLockTask();
-            }
         });
     }
 
@@ -273,9 +283,6 @@ public class MainActivity extends AppCompatActivity {
             sharedPreferences.edit().putBoolean(Constants.PREF_IS_LOCKED, false).apply();
             showScreen(false);
             Toast.makeText(this, "Dispositivo desbloqueado.", Toast.LENGTH_LONG).show();
-            if (isDeviceOwner()) {
-                stopLockTask();
-            }
         });
     }
 
@@ -286,6 +293,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onBackPressed() {
         if (sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false)) {
+            // El dispositivo está bloqueado.
             Toast.makeText(this, "El dispositivo está bloqueado. Contacte a la administración.", Toast.LENGTH_SHORT).show();
         } else {
             super.onBackPressed();
