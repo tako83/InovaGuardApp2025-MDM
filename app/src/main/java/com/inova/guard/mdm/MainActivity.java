@@ -5,10 +5,11 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
-import android.net.Uri;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.os.Handler;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -17,7 +18,6 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.bumptech.glide.Glide;
@@ -29,9 +29,21 @@ import com.inova.guard.mdm.utils.Constants;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.IOException;
+import java.util.Objects;
+
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
+    private static final int REQUEST_CODE_ENABLE_ADMIN = 1;
     private View lockedLayout;
     private ImageView logoImageView;
     private TextView lockedMessageTextView;
@@ -51,26 +63,11 @@ public class MainActivity extends AppCompatActivity {
     private ComponentName adminComponentName;
     private SharedPreferences sharedPreferences;
     private Handler handler;
-    private Runnable checkStatusRunnable;
-    private boolean isTelevision;
+    private Runnable checkConnectionRunnable;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        // Agregamos el nuevo Callback para el botón de "atrás"
-        OnBackPressedCallback callback = new OnBackPressedCallback(true) {
-            @Override
-            public void handleOnBackPressed() {
-                if (sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false)) {
-                    Toast.makeText(MainActivity.this, "El dispositivo está bloqueado. Contacte a la administración.", Toast.LENGTH_SHORT).show();
-                } else {
-                    this.remove();
-                    MainActivity.super.onBackPressed();
-                }
-            }
-        };
-        getOnBackPressedDispatcher().addCallback(this, callback);
 
         sharedPreferences = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE);
         String deviceId = sharedPreferences.getString(Constants.PREF_DEVICE_ID, null);
@@ -83,85 +80,8 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        isTelevision = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
-        Log.d(TAG, "isTelevision: " + isTelevision);
+        setContentView(R.layout.activity_main);
 
-        // A partir de aquí, la lógica de UI se gestiona en un solo método
-        setInitialLayout();
-        initializeViews();
-
-        if (!MdmService.isRunning) {
-            Intent serviceIntent = new Intent(this, MdmService.class);
-            startService(serviceIntent);
-        }
-
-        devicePolicyManager = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
-        adminComponentName = new ComponentName(this, DeviceAdminReceiver.class);
-
-        if (unlockButton != null) {
-            unlockButton.setOnClickListener(v -> attemptUnlock());
-        }
-
-        if (contactAdminButton != null) {
-            contactAdminButton.setOnClickListener(v -> {
-                String phoneNumber = contactPhoneMainTextView.getText().toString().replace("Teléfono: ", "");
-                if (!phoneNumber.isEmpty() && !phoneNumber.equals("N/A")) {
-                    Intent dialIntent = new Intent(Intent.ACTION_DIAL);
-                    dialIntent.setData(Uri.parse("tel:" + phoneNumber));
-                    startActivity(dialIntent);
-                } else {
-                    Toast.makeText(this, "Número de contacto no disponible.", Toast.LENGTH_SHORT).show();
-                }
-            });
-        }
-
-        if (contactPhoneTextView != null) {
-            contactPhoneTextView.setOnClickListener(v -> {
-                String phoneNumber = contactPhoneTextView.getText().toString().replace("Teléfono: ", "");
-                if (!phoneNumber.isEmpty()) {
-                    Intent dialIntent = new Intent(Intent.ACTION_DIAL);
-                    dialIntent.setData(Uri.parse("tel:" + phoneNumber));
-                    startActivity(dialIntent);
-                }
-            });
-        }
-
-        handler = new Handler();
-        checkStatusRunnable = () -> {
-            refreshScreenState();
-            handler.postDelayed(checkStatusRunnable, Constants.CONNECTION_CHECK_INTERVAL);
-        };
-    }
-
-    @Override
-    protected void onNewIntent(Intent intent) {
-        super.onNewIntent(intent);
-        setIntent(intent);
-        refreshScreenState();
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        refreshScreenState();
-        handler.post(checkStatusRunnable);
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        handler.removeCallbacks(checkStatusRunnable);
-    }
-
-    private void setInitialLayout() {
-        if (isTelevision) {
-            setContentView(R.layout.main_layout_tv);
-        } else {
-            setContentView(R.layout.activity_main);
-        }
-    }
-
-    private void initializeViews() {
         lockedLayout = findViewById(R.id.locked_layout);
         logoImageView = findViewById(R.id.logo_image_view);
         lockedMessageTextView = findViewById(R.id.locked_message_text_view);
@@ -178,109 +98,119 @@ public class MainActivity extends AppCompatActivity {
         paymentInstructionsTextView = findViewById(R.id.payment_instructions_text_view);
         contactAdminButton = findViewById(R.id.contact_admin_button);
         contactPhoneMainTextView = findViewById(R.id.contact_phone_main_text_view);
+
+        devicePolicyManager = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+        adminComponentName = new ComponentName(this, DeviceAdminReceiver.class);
+
+        if (!MdmService.isRunning) {
+            Intent serviceIntent = new Intent(this, MdmService.class);
+            startService(serviceIntent);
+        }
+
+        unlockButton.setOnClickListener(v -> attemptUnlock());
+
+        contactAdminButton.setOnClickListener(v -> {
+            String phoneNumber = contactPhoneMainTextView.getText().toString().replace("Teléfono: ", "");
+            if (!phoneNumber.isEmpty() && !phoneNumber.equals("N/A")) {
+                Intent dialIntent = new Intent(Intent.ACTION_DIAL);
+                dialIntent.setData(android.net.Uri.parse("tel:" + phoneNumber));
+                startActivity(dialIntent);
+            } else {
+                Toast.makeText(this, "Número de contacto no disponible.", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        contactPhoneTextView.setOnClickListener(v -> {
+            String phoneNumber = contactPhoneTextView.getText().toString().replace("Teléfono: ", "");
+            if (!phoneNumber.isEmpty()) {
+                Intent dialIntent = new Intent(Intent.ACTION_DIAL);
+                dialIntent.setData(android.net.Uri.parse("tel:" + phoneNumber));
+                startActivity(dialIntent);
+            }
+        });
+
+        handler = new Handler();
+        checkConnectionRunnable = new Runnable() {
+            @Override
+            public void run() {
+                checkDeviceStatus();
+                handler.postDelayed(this, Constants.CONNECTION_CHECK_INTERVAL);
+            }
+        };
+        handler.post(checkConnectionRunnable);
+
+        if (devicePolicyManager != null && adminComponentName != null && devicePolicyManager.isAdminActive(adminComponentName)) {
+            Log.d(TAG, "Device Admin is active. Attempting to restrict settings.");
+        } else {
+            Log.w(TAG, "Device Admin is not active. App may be easily uninstalled.");
+        }
+
+        if (isDeviceOwner()) {
+            Log.d(TAG, "Running in Device Owner mode. App can be set as Kiosk.");
+            devicePolicyManager.setLockTaskPackages(adminComponentName, new String[]{getPackageName()});
+        }
     }
 
-    private void refreshScreenState() {
-        boolean isLocked = sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false);
-        boolean showPaymentReminder = getIntent().getBooleanExtra(Constants.EXTRA_SHOW_PAYMENT_REMINDER, false);
+    @Override
+    protected void onResume() {
+        super.onResume();
+        checkDeviceStatus();
+        handler.post(checkConnectionRunnable);
+    }
 
+    @Override
+    protected void onPause() {
+        super.onPause();
+        handler.removeCallbacks(checkConnectionRunnable);
+    }
+
+    private void showScreen(boolean isLocked) {
         if (isLocked) {
-            showLockedScreen();
-        } else if (showPaymentReminder) {
-            showPaymentReminderScreen();
+            lockedLayout.setVisibility(View.VISIBLE);
+            mainLayout.setVisibility(View.GONE);
+            Glide.with(this).load(R.drawable.inova_guard_logo).into(logoImageView);
         } else {
-            // El dispositivo no está bloqueado y no hay recordatorio de pago activo.
-            // Esto significa que la app fue lanzada por el usuario.
-            // Podrías mostrar una pantalla "normal" o, como en tu código original, cerrar la actividad
-            // para que regrese a la pantalla de inicio.
-            if (!isTelevision) {
-                // Aquí podrías agregar una pantalla de bienvenida o simplemente terminar
-                // la actividad para no molestar al usuario si no hay nada que mostrar.
-                // Como tu código original la terminaba, mantendré esa lógica.
-                // Pero lo haré de forma más segura.
-                if (mainLayout != null) {
-                    mainLayout.setVisibility(View.GONE);
-                }
-            }
-            // En caso de TV, siempre mostramos la pantalla principal si no hay bloqueo.
-            showPaymentReminderScreen();
+            lockedLayout.setVisibility(View.GONE);
+            mainLayout.setVisibility(View.VISIBLE);
         }
     }
 
-    private void showLockedScreen() {
-        if (isTelevision) {
-            setContentView(R.layout.locked_layout_tv);
-            initializeViews();
-            if (unlockButton != null) {
-                unlockButton.setOnClickListener(v -> attemptUnlock());
-            }
-            if (contactPhoneTextView != null) {
-                contactPhoneTextView.setOnClickListener(v -> {
-                    String phoneNumber = contactPhoneTextView.getText().toString().replace("Teléfono: ", "");
-                    if (!phoneNumber.isEmpty()) {
-                        Intent dialIntent = new Intent(Intent.ACTION_DIAL);
-                        dialIntent.setData(Uri.parse("tel:" + phoneNumber));
-                        startActivity(dialIntent);
-                    }
-                });
-            }
-        } else {
-            if (lockedLayout != null) lockedLayout.setVisibility(View.VISIBLE);
-            if (mainLayout != null) mainLayout.setVisibility(View.GONE);
-            if (logoImageView != null) Glide.with(this).load(R.drawable.inova_guard_logo).into(logoImageView);
-        }
-        updateLockedInfo();
-    }
+    private void checkDeviceStatus() {
+        boolean isDeviceLocked = sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false);
+        showScreen(isDeviceLocked);
 
-    private void showPaymentReminderScreen() {
-        if (isTelevision) {
-            setContentView(R.layout.main_layout_tv);
-            initializeViews();
-        } else {
-            if (lockedLayout != null) lockedLayout.setVisibility(View.GONE);
-            if (mainLayout != null) mainLayout.setVisibility(View.VISIBLE);
-        }
-        updatePaymentInfo();
-    }
-
-    private void updateLockedInfo() {
-        String contactNumber = sharedPreferences.getString(Constants.PREF_CONTACT_PHONE, "+58 412 1234567");
-        if (contactPhoneTextView != null) {
+        if (isDeviceLocked) {
+            String contactNumber = sharedPreferences.getString(Constants.PREF_CONTACT_PHONE, "+58 412 1234567");
             contactPhoneTextView.setText("Teléfono: " + contactNumber);
-        }
-        if (incorrectCodeTextView != null) {
             incorrectCodeTextView.setVisibility(View.GONE);
-        }
-        if (unlockCodeEditText != null) {
             unlockCodeEditText.setText("");
+        } else {
+            updatePaymentInfo();
         }
     }
 
     private void updatePaymentInfo() {
-        String nextPaymentDate = sharedPreferences.getString(Constants.PREF_NEXT_PAYMENT_DATE, "N/A");
-        String amountDue = sharedPreferences.getString(Constants.PREF_AMOUNT_DUE, "N/A");
-        String amountPaid = sharedPreferences.getString(Constants.PREF_AMOUNT_PAID, "N/A");
-        String deviceBrand = sharedPreferences.getString(Constants.PREF_DEVICE_BRAND, "N/A");
-        String deviceModel = sharedPreferences.getString(Constants.PREF_DEVICE_MODEL, "N/A");
-        String paymentInstructions = sharedPreferences.getString(Constants.PREF_PAYMENT_INSTRUCTIONS, "N/A");
+        String nextPaymentDate = sharedPreferences.getString(Constants.PREF_NEXT_PAYMENT_DATE, "31/12/2025");
+        String amountDue = sharedPreferences.getString(Constants.PREF_AMOUNT_DUE, "$0.00");
+        String amountPaid = sharedPreferences.getString(Constants.PREF_AMOUNT_PAID, "$0.00");
+        String deviceBrand = sharedPreferences.getString(Constants.PREF_DEVICE_BRAND, "Marca");
+        String deviceModel = sharedPreferences.getString(Constants.PREF_DEVICE_MODEL, "Modelo");
+        String paymentInstructions = sharedPreferences.getString(Constants.PREF_PAYMENT_INSTRUCTIONS, "Contacte a la administración para más detalles.");
         String contactNumber = sharedPreferences.getString(Constants.PREF_CONTACT_PHONE, "N/A");
 
-        if (nextPaymentDateTextView != null) nextPaymentDateTextView.setText(nextPaymentDate);
-        if (amountDueTextView != null) amountDueTextView.setText(amountDue);
-        if (amountPaidTextView != null) amountPaidTextView.setText(amountPaid);
-        if (deviceInfoTextView != null) deviceInfoTextView.setText(deviceBrand + " " + deviceModel);
-        if (paymentInstructionsTextView != null) paymentInstructionsTextView.setText(paymentInstructions);
-        if (contactPhoneMainTextView != null) contactPhoneMainTextView.setText("Teléfono: " + contactNumber);
+        nextPaymentDateTextView.setText(nextPaymentDate);
+        amountDueTextView.setText(amountDue);
+        amountPaidTextView.setText(amountPaid);
+        deviceInfoTextView.setText(deviceBrand + " " + deviceModel);
+        paymentInstructionsTextView.setText(paymentInstructions);
+        contactPhoneMainTextView.setText("Teléfono: " + contactNumber);
     }
-
 
     private void attemptUnlock() {
         String enteredCode = unlockCodeEditText.getText().toString().trim();
         if (enteredCode.isEmpty()) {
-            if (incorrectCodeTextView != null) {
-                incorrectCodeTextView.setText("Por favor, introduce el código.");
-                incorrectCodeTextView.setVisibility(View.VISIBLE);
-            }
+            incorrectCodeTextView.setText("Por favor, introduce el código.");
+            incorrectCodeTextView.setVisibility(View.VISIBLE);
             return;
         }
 
@@ -297,27 +227,21 @@ public class MainActivity extends AppCompatActivity {
                     if (success) {
                         sharedPreferences.edit().putBoolean(Constants.PREF_IS_LOCKED, false).apply();
                         runOnUiThread(() -> {
-                            refreshScreenState();
+                            showScreen(false);
                             Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
-                            if (incorrectCodeTextView != null) {
-                                incorrectCodeTextView.setVisibility(View.GONE);
-                            }
+                            incorrectCodeTextView.setVisibility(View.GONE);
                         });
                     } else {
                         runOnUiThread(() -> {
-                            if (incorrectCodeTextView != null) {
-                                incorrectCodeTextView.setText(message);
-                                incorrectCodeTextView.setVisibility(View.VISIBLE);
-                            }
+                            incorrectCodeTextView.setText(message);
+                            incorrectCodeTextView.setVisibility(View.VISIBLE);
                         });
                     }
                 } catch (JSONException e) {
                     Log.e(TAG, "Error parsing unlock response: " + e.getMessage());
                     runOnUiThread(() -> {
-                        if (incorrectCodeTextView != null) {
-                            incorrectCodeTextView.setText("Error en la respuesta del servidor.");
-                            incorrectCodeTextView.setVisibility(View.VISIBLE);
-                        }
+                        incorrectCodeTextView.setText("Error en la respuesta del servidor.");
+                        incorrectCodeTextView.setVisibility(View.VISIBLE);
                     });
                 }
             }
@@ -326,10 +250,8 @@ public class MainActivity extends AppCompatActivity {
             public void onFailure(String errorMessage) {
                 Log.e(TAG, "Unlock API call failed: " + errorMessage);
                 runOnUiThread(() -> {
-                    if (incorrectCodeTextView != null) {
-                        incorrectCodeTextView.setText("Error de conexión al servidor: " + errorMessage);
-                        incorrectCodeTextView.setVisibility(View.VISIBLE);
-                    }
+                    incorrectCodeTextView.setText("Error de conexión al servidor: " + errorMessage);
+                    incorrectCodeTextView.setVisibility(View.VISIBLE);
                 });
             }
         });
@@ -338,7 +260,7 @@ public class MainActivity extends AppCompatActivity {
     public void lockDevice() {
         runOnUiThread(() -> {
             sharedPreferences.edit().putBoolean(Constants.PREF_IS_LOCKED, true).apply();
-            refreshScreenState();
+            showScreen(true);
             Toast.makeText(this, "Dispositivo bloqueado por falta de pago.", Toast.LENGTH_LONG).show();
             if (isDeviceOwner()) {
                 startLockTask();
@@ -349,7 +271,7 @@ public class MainActivity extends AppCompatActivity {
     public void unlockDevice() {
         runOnUiThread(() -> {
             sharedPreferences.edit().putBoolean(Constants.PREF_IS_LOCKED, false).apply();
-            refreshScreenState();
+            showScreen(false);
             Toast.makeText(this, "Dispositivo desbloqueado.", Toast.LENGTH_LONG).show();
             if (isDeviceOwner()) {
                 stopLockTask();
@@ -359,5 +281,14 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean isDeviceOwner() {
         return devicePolicyManager != null && devicePolicyManager.isDeviceOwnerApp(getPackageName());
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false)) {
+            Toast.makeText(this, "El dispositivo está bloqueado. Contacte a la administración.", Toast.LENGTH_SHORT).show();
+        } else {
+            super.onBackPressed();
+        }
     }
 }
