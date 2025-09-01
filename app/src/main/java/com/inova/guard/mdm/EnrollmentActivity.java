@@ -138,9 +138,11 @@ public class EnrollmentActivity extends AppCompatActivity {
         String typeText = etDeviceType.getText().toString().trim();
         String brandModelText = etDeviceBrandModel.getText().toString().trim();
 
+        // AÑADIDO: Obtener los datos del cliente
         String clientName = etClientName.getText().toString().trim();
         String clientEmail = etClientEmail.getText().toString().trim();
 
+        // AÑADIDO: Lógica de validación para los nuevos campos
         if (serialText.isEmpty() || typeText.isEmpty() || brandModelText.isEmpty() || clientName.isEmpty() || clientEmail.isEmpty()) {
             Toast.makeText(this, "Todos los campos son obligatorios.", Toast.LENGTH_SHORT).show();
             return;
@@ -159,22 +161,25 @@ public class EnrollmentActivity extends AppCompatActivity {
 
         try {
             JSONObject deviceData = new JSONObject();
+            // deviceData.put("device_id", UUID.randomUUID().toString()); // ELIMINE ESTA LÍNEA
             deviceData.put("serial_number", serialText);
             deviceData.put("device_type", typeText);
             deviceData.put("brand", brand);
             deviceData.put("model_name", modelName);
             deviceData.put("imei", getImei());
 
+            // AÑADIDO: Incluir la información del cliente
             deviceData.put("client_name", clientName);
             deviceData.put("client_email", clientEmail);
-            deviceData.put("contact_phone", "");
+            deviceData.put("contact_phone", ""); // Es posible que su app envíe el número del cliente aquí
 
+            // AÑADIDO: Campos adicionales para compatibilidad con el serializador
             deviceData.put("company_logo_url", "");
             deviceData.put("unlock_code", "");
             deviceData.put("message", "");
+            deviceData.put("device_brand_info", brand);
+            deviceData.put("device_model_info", modelName);
 
-            // LÍNEA AÑADIDA PARA DEPURACIÓN
-            Log.d(TAG, "JSON a enviar: " + deviceData.toString());
 
             ApiUtils.enrollDevice(this, deviceData, new ApiUtils.ApiCallback() {
                 @Override

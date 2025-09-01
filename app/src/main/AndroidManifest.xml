@@ -88,6 +88,17 @@
             </intent-filter>
         </receiver>
 
+        <!-- Nuevo receptor para escuchar eventos de pantalla -->
+        <receiver
+            android:name=".MainActivity$ScreenReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.SCREEN_ON" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>
