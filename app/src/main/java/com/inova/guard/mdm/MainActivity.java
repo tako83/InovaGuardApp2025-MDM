@@ -1,11 +1,9 @@
 package com.inova.guard.mdm;
 
 import android.app.admin.DevicePolicyManager;
-import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -20,7 +18,6 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.bumptech.glide.Glide;
@@ -34,7 +31,6 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -68,7 +64,6 @@ public class MainActivity extends AppCompatActivity {
     private SharedPreferences sharedPreferences;
     private Handler handler;
     private Runnable checkConnectionRunnable;
-    private ScreenReceiver screenReceiver;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -142,54 +137,36 @@ public class MainActivity extends AppCompatActivity {
                 handler.postDelayed(this, Constants.CONNECTION_CHECK_INTERVAL);
             }
         };
+        handler.post(checkConnectionRunnable);
 
         if (devicePolicyManager != null && adminComponentName != null && devicePolicyManager.isAdminActive(adminComponentName)) {
             Log.d(TAG, "Device Admin is active. Attempting to restrict settings.");
+            // Esto solo se hace si el app es Device Owner. Si es solo admin, no se puede hacer.
+            if (isDeviceOwner()) {
+                devicePolicyManager.setLockTaskPackages(adminComponentName, new String[]{getPackageName()});
+            }
         } else {
             Log.w(TAG, "Device Admin is not active. App may be easily uninstalled.");
         }
-
-        if (isDeviceOwner()) {
-            Log.d(TAG, "Running in Device Owner mode. App can be set as Kiosk.");
-            devicePolicyManager.setLockTaskPackages(adminComponentName, new String[]{getPackageName()});
-        }
-
-        // Se reemplaza `onBackPressed` con el nuevo `OnBackPressedDispatcher`
-        OnBackPressedCallback callback = new OnBackPressedCallback(true /* enabled */) {
-            @Override
-            public void handleOnBackPressed() {
-                if (sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false)) {
-                    // Si el dispositivo está bloqueado, se consume el evento y se muestra un Toast.
-                    Toast.makeText(MainActivity.this, "El dispositivo está bloqueado. Contacte a la administración.", Toast.LENGTH_SHORT).show();
-                } else {
-                    // Si no está bloqueado, se desactiva el callback y se permite el comportamiento por defecto.
-                    this.setEnabled(false);
-                    getOnBackPressedDispatcher().onBackPressed();
-                    this.setEnabled(true);
-                }
-            }
-        };
-        getOnBackPressedDispatcher().addCallback(this, callback);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        // ✅ CORRECCIÓN CLAVE: Iniciar el bloqueo de tareas si el dispositivo está bloqueado al reanudar la actividad.
+        // Esto asegura que, incluso si el usuario sale brevemente y regresa, el bloqueo se active.
+        boolean isDeviceLocked = sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false);
+        if (isDeviceLocked) {
+            startLockTask();
+        }
         checkDeviceStatus();
         handler.post(checkConnectionRunnable);
-        screenReceiver = new ScreenReceiver();
-        IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_ON);
-        filter.addAction(Intent.ACTION_USER_PRESENT);
-        registerReceiver(screenReceiver, filter);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
         handler.removeCallbacks(checkConnectionRunnable);
-        if (screenReceiver != null) {
-            unregisterReceiver(screenReceiver);
-        }
     }
 
     private void showScreen(boolean isLocked) {
@@ -197,21 +174,24 @@ public class MainActivity extends AppCompatActivity {
             lockedLayout.setVisibility(View.VISIBLE);
             mainLayout.setVisibility(View.GONE);
             Glide.with(this).load(R.drawable.inova_guard_logo).into(logoImageView);
-            if (isDeviceOwner()) {
-                startLockTask();
-            }
+
+            // ✅ Mantenemos la lógica de bloqueo aquí, aunque también se activa en onResume()
+            // para mayor redundancia y fiabilidad.
+            startLockTask();
+
         } else {
             lockedLayout.setVisibility(View.GONE);
             mainLayout.setVisibility(View.VISIBLE);
-            if (isDeviceOwner()) {
-                stopLockTask();
-            }
+
+            // ✅ Detén el modo de bloqueo de tareas.
+            stopLockTask();
         }
     }
 
     private void checkDeviceStatus() {
         boolean isDeviceLocked = sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false);
         showScreen(isDeviceLocked);
+
         if (isDeviceLocked) {
             String contactNumber = sharedPreferences.getString(Constants.PREF_CONTACT_PHONE, "+58 412 1234567");
             contactPhoneTextView.setText("Teléfono: " + contactNumber);
@@ -310,23 +290,13 @@ public class MainActivity extends AppCompatActivity {
         return devicePolicyManager != null && devicePolicyManager.isDeviceOwnerApp(getPackageName());
     }
 
-    // ¡¡¡CORRECCIÓN APLICADA AQUÍ!!!
-    // La clase debe ser estática para evitar el error "This inner class should be static"
-    // y prevenir fugas de memoria.
-    public static class ScreenReceiver extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (Objects.equals(intent.getAction(), Intent.ACTION_SCREEN_ON) || Objects.equals(intent.getAction(), Intent.ACTION_USER_PRESENT)) {
-                SharedPreferences sharedPreferences = context.getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE);
-                boolean isLocked = sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false);
-                if (isLocked) {
-                    Log.d(TAG, "Screen on event received. Re-enforcing lock.");
-                    // Iniciar la MainActivity para que pueda volver a aplicar el lockTask
-                    Intent mainActivityIntent = new Intent(context, MainActivity.class);
-                    mainActivityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    context.startActivity(mainActivityIntent);
-                }
-            }
+    @Override
+    public void onBackPressed() {
+        if (sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false)) {
+            // El dispositivo está bloqueado.
+            Toast.makeText(this, "El dispositivo está bloqueado. Contacte a la administración.", Toast.LENGTH_SHORT).show();
+        } else {
+            super.onBackPressed();
         }
     }
 }
