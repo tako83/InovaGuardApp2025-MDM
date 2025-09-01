@@ -124,4 +124,25 @@ public class ApiUtils {
             }
         });
     }
+
+    // Nuevo método para notificar al servidor cuando los permisos de administrador son desactivados
+    public static void notifyAdminDisabled(Context context, String serialNumber, ApiCallback callback) {
+        String url = getBaseUrl() + "/api/notify-admin-disabled/" + serialNumber + "/";
+        Request request = new Request.Builder().url(url).get().build();
+        client.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                if (response.isSuccessful() && response.body() != null) {
+                    callback.onSuccess(response.body().string());
+                } else {
+                    callback.onFailure("Error al notificar: " + response.code());
+                }
+            }
+
+            @Override
+            public void onFailure(Call call, IOException e) {
+                callback.onFailure("Fallo de red al notificar: " + e.getMessage());
+            }
+        });
+    }
 }
