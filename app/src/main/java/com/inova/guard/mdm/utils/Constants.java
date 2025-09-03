@@ -1,7 +1,19 @@
 package com.inova.guard.mdm.utils;
 
 public class Constants {
-    public static final String BASE_URL = "http://10.0.2.2:8000";
+
+    // --- Configuración de Servidor ---
+    // Cambia esta bandera para usar el servidor local (true) o el público (false).
+    public static final boolean USE_LOCAL_SERVER = false;
+
+    // URLs de los servidores
+    public static final String PUBLIC_BASE_URL = "https://tako83.pythonanywhere.com";
+    public static final String LOCAL_BASE_URL = "http://192.168.0.102:8000";
+
+    // --- URL que usará la aplicación ---
+    public static final String BASE_URL = USE_LOCAL_SERVER ? LOCAL_BASE_URL : PUBLIC_BASE_URL;
+
+    // --- El resto de tus constantes...
     public static final String PREFS_NAME = "InovaGuardMdmPrefs";
     public static final String PREF_IS_ENROLLED = "isEnrolled";
     public static final String PREF_DEVICE_ID = "deviceId";

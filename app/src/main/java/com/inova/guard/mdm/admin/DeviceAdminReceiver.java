@@ -32,22 +32,24 @@ public class DeviceAdminReceiver extends android.app.admin.DeviceAdminReceiver {
 
     @Override
     public CharSequence onDisableRequested(Context context, Intent intent) {
-        // Bloquea la pantalla para evitar que el usuario desactive el administrador de dispositivo
         DevicePolicyManager devicePolicyManager = (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
         ComponentName adminComponentName = new ComponentName(context, DeviceAdminReceiver.class);
-
-        // Verificamos si aún somos administradores antes de intentar bloquear
         if (devicePolicyManager != null && devicePolicyManager.isAdminActive(adminComponentName)) {
             devicePolicyManager.lockNow();
-
-            // Inicia la actividad principal para forzar el modo de tarea bloqueada
             Intent lockIntent = new Intent(context, MainActivity.class);
             lockIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            lockIntent.putExtra("reason_for_lock", "admin_disabled");
             context.startActivity(lockIntent);
         }
-
-        // Devuelve el mensaje de advertencia
-        return "Advertencia: Deshabilitar InovaGuard puede resultar en el bloqueo del dispositivo si existen pagos pendientes.";
+        String serialNumber = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(Constants.PREF_SERIAL_NUMBER, "unknown");
+        if (serialNumber != null && !"unknown".equals(serialNumber)) {
+            ApiUtils.notifyAdminDisabled(context, serialNumber, new ApiUtils.ApiCallback() {
+                @Override public void onSuccess(String response) { Log.d(TAG, "Notificación de desactivación enviada."); }
+                @Override public void onFailure(String errorMessage) { Log.e(TAG, "Error al notificar sobre la desactivación: " + errorMessage); }
+            });
+        }
+        return null;
     }
 
     @Override
@@ -55,18 +57,14 @@ public class DeviceAdminReceiver extends android.app.admin.DeviceAdminReceiver {
         super.onDisabled(context, intent);
         Toast.makeText(context, "Administrador de Dispositivo InovaGuard desactivado.", Toast.LENGTH_SHORT).show();
         Log.d(TAG, "Administrador de Dispositivo InovaGuard desactivado.");
-
-        // Notificar al servidor que el Device Admin ha sido desactivado
         String serialNumber = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
                 .getString(Constants.PREF_SERIAL_NUMBER, "unknown");
-
         if (serialNumber != null && !"unknown".equals(serialNumber)) {
             ApiUtils.notifyAdminDisabled(context, serialNumber, new ApiUtils.ApiCallback() {
                 @Override
                 public void onSuccess(String response) {
                     Log.d(TAG, "Notificación de desactivación enviada al servidor.");
                 }
-
                 @Override
                 public void onFailure(String errorMessage) {
                     Log.e(TAG, "Error al notificar al servidor sobre la desactivación: " + errorMessage);
