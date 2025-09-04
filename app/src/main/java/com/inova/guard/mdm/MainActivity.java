@@ -30,7 +30,7 @@ import android.Manifest;
 import android.content.pm.PackageManager;
 import androidx.core.content.ContextCompat;
 
-
+import com.google.firebase.messaging.FirebaseMessaging;
 import com.bumptech.glide.Glide;
 import com.inova.guard.mdm.admin.DeviceAdminReceiver;
 import com.inova.guard.mdm.service.MdmService;
@@ -204,6 +204,9 @@ public class MainActivity extends AppCompatActivity {
 
         // Llama al método para solicitar los permisos
         requestLocationPermissions();
+
+        // Obtener y enviar el token de FCM al servidor
+        getAndSendFCMToken();
     }
 
     private void requestLocationPermissions() {
@@ -250,27 +253,86 @@ public class MainActivity extends AppCompatActivity {
             lockedLayout.setVisibility(View.VISIBLE);
             mainLayout.setVisibility(View.GONE);
             Glide.with(this).load(R.drawable.inova_guard_logo).into(logoImageView);
-            if (isDeviceOwner()) {
-                startLockTask();
-            }
         } else {
             lockedLayout.setVisibility(View.GONE);
             mainLayout.setVisibility(View.VISIBLE);
-            if (isDeviceOwner()) {
-                stopLockTask();
-            }
         }
+    }
+
+    private void getAndSendFCMToken() {
+        FirebaseMessaging.getInstance().getToken()
+                .addOnCompleteListener(task -> {
+                    if (!task.isSuccessful()) {
+                        Log.w(TAG, "Fetching FCM registration token failed", task.getException());
+                        return;
+                    }
+                    String token = task.getResult();
+                    Log.d(TAG, "FCM Token: " + token);
+                    sendTokenToServer(token);
+                });
+    }
+
+    private void sendTokenToServer(String token) {
+        // Debes reemplazar esta URL con la URL real de tu backend
+        // que está configurado para recibir el token.
+        String serverUrl = "https://tu-backend.com/api/register-device";
+
+        OkHttpClient client = new OkHttpClient();
+        MediaType JSON = MediaType.get("application/json; charset=utf-8");
+
+        JSONObject jsonBody = new JSONObject();
+        try {
+            jsonBody.put("fcmToken", token);
+            String deviceId = sharedPreferences.getString(Constants.PREF_DEVICE_ID, "N/A");
+            jsonBody.put("deviceId", deviceId);
+        } catch (JSONException e) {
+            Log.e(TAG, "Error al crear el JSON para enviar el token", e);
+            return;
+        }
+
+        RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
+        Request request = new Request.Builder()
+                .url(serverUrl)
+                .post(body)
+                .build();
+
+        client.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                Log.e(TAG, "Error al enviar el token al servidor", e);
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                if (response.isSuccessful()) {
+                    Log.d(TAG, "Token de FCM enviado exitosamente al servidor.");
+                } else {
+                    Log.e(TAG, "Error en la respuesta del servidor: " + response.code());
+                }
+                response.close();
+            }
+        });
     }
 
     private void checkDeviceStatus() {
         boolean isDeviceLocked = sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false);
         showScreen(isDeviceLocked);
         if (isDeviceLocked) {
+            // Al detectar el estado de bloqueo, activamos el modo de quiosco si somos el dueño del dispositivo.
+            if (isDeviceOwner()) {
+                Log.d(TAG, "Activando modo Kiosk (Lock Task Mode)");
+                startLockTask();
+            }
             String contactNumber = sharedPreferences.getString(Constants.PREF_CONTACT_PHONE, "+58 412 1234567");
             contactPhoneTextView.setText("Teléfono: " + contactNumber);
             incorrectCodeTextView.setVisibility(View.GONE);
             unlockCodeEditText.setText("");
         } else {
+            // Si el dispositivo está desbloqueado, detenemos el modo de quiosco.
+            if (isDeviceOwner()) {
+                Log.d(TAG, "Desactivando modo Kiosk (Lock Task Mode)");
+                stopLockTask();
+            }
             updatePaymentInfo();
         }
     }
@@ -300,54 +362,39 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        String serialNumber = sharedPreferences.getString(Constants.PREF_SERIAL_NUMBER, "unknown");
+        // Obtener el código de desbloqueo almacenado
+        String storedUnlockCode = sharedPreferences.getString(Constants.PREF_UNLOCK_CODE, "");
 
-        ApiUtils.verifyUnlockCode(this, serialNumber, enteredCode, new ApiUtils.ApiCallback() {
-            @Override
-            public void onSuccess(String response) {
-                try {
-                    JSONObject jsonResponse = new JSONObject(response);
-                    boolean success = jsonResponse.getBoolean("success");
-                    String message = jsonResponse.getString("message");
-
-                    if (success) {
-                        sharedPreferences.edit().putBoolean(Constants.PREF_IS_LOCKED, false).apply();
-                        runOnUiThread(() -> {
-                            unlockDevice();
-                            Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
-                            incorrectCodeTextView.setVisibility(View.GONE);
-                        });
-                    } else {
-                        runOnUiThread(() -> {
-                            incorrectCodeTextView.setText(message);
-                            incorrectCodeTextView.setVisibility(View.VISIBLE);
-                        });
-                    }
-                } catch (JSONException e) {
-                    Log.e(TAG, "Error parsing unlock response: " + e.getMessage());
-                    runOnUiThread(() -> {
-                        incorrectCodeTextView.setText("Error en la respuesta del servidor.");
-                        incorrectCodeTextView.setVisibility(View.VISIBLE);
-                    });
-                }
-            }
-
-            @Override
-            public void onFailure(String errorMessage) {
-                Log.e(TAG, "Unlock API call failed: " + errorMessage);
-                runOnUiThread(() -> {
-                    incorrectCodeTextView.setText("Error de conexión al servidor: " + errorMessage);
-                    incorrectCodeTextView.setVisibility(View.VISIBLE);
-                });
-            }
-        });
+        if (enteredCode.equals(storedUnlockCode)) {
+            // El código es correcto, desbloquea el dispositivo
+            sharedPreferences.edit().putBoolean(Constants.PREF_IS_LOCKED, false).apply();
+            runOnUiThread(() -> {
+                unlockDevice();
+                Toast.makeText(MainActivity.this, "Dispositivo desbloqueado correctamente.", Toast.LENGTH_SHORT).show();
+                incorrectCodeTextView.setVisibility(View.GONE);
+            });
+        } else {
+            // El código es incorrecto
+            runOnUiThread(() -> {
+                incorrectCodeTextView.setText("Código de desbloqueo incorrecto.");
+                incorrectCodeTextView.setVisibility(View.VISIBLE);
+            });
+        }
     }
 
     public void lockDevice() {
         runOnUiThread(() -> {
             sharedPreferences.edit().putBoolean(Constants.PREF_IS_LOCKED, true).apply();
+            // Almacenar el código de desbloqueo para usarlo en el intento de desbloqueo
+            // Nota: Este valor se debe recibir del backend
+            sharedPreferences.edit().putString(Constants.PREF_UNLOCK_CODE, "1234").apply(); // Valor de ejemplo
             showScreen(true);
             Toast.makeText(this, "Dispositivo bloqueado por falta de pago.", Toast.LENGTH_LONG).show();
+            // Activamos el modo de quiosco para evitar que el usuario salga.
+            if (isDeviceOwner()) {
+                Log.d(TAG, "Iniciando modo de bloqueo de tarea.");
+                startLockTask();
+            }
         });
     }
 
@@ -356,6 +403,11 @@ public class MainActivity extends AppCompatActivity {
             sharedPreferences.edit().putBoolean(Constants.PREF_IS_LOCKED, false).apply();
             showScreen(false);
             Toast.makeText(this, "Dispositivo desbloqueado.", Toast.LENGTH_LONG).show();
+            // Detenemos el modo de quiosco.
+            if (isDeviceOwner()) {
+                Log.d(TAG, "Deteniendo modo de bloqueo de tarea.");
+                stopLockTask();
+            }
         });
     }
 
@@ -363,9 +415,6 @@ public class MainActivity extends AppCompatActivity {
         return devicePolicyManager != null && devicePolicyManager.isDeviceOwnerApp(getPackageName());
     }
 
-    // ¡¡¡CORRECCIÓN APLICADA AQUÍ!!!
-    // La clase debe ser estática para evitar el error "This inner class should be static"
-    // y prevenir fugas de memoria.
     public static class ScreenReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -374,7 +423,6 @@ public class MainActivity extends AppCompatActivity {
                 boolean isLocked = sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false);
                 if (isLocked) {
                     Log.d(TAG, "Screen on event received. Re-enforcing lock.");
-                    // Iniciar la MainActivity para que pueda volver a aplicar el lockTask
                     Intent mainActivityIntent = new Intent(context, MainActivity.class);
                     mainActivityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                     context.startActivity(mainActivityIntent);

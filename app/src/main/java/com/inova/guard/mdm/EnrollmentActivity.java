@@ -20,6 +20,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import com.google.firebase.messaging.FirebaseMessaging;
 import com.inova.guard.mdm.admin.DeviceAdminReceiver;
 import com.inova.guard.mdm.service.MdmService;
 import com.inova.guard.mdm.utils.ApiUtils;
@@ -47,7 +48,6 @@ public class EnrollmentActivity extends AppCompatActivity {
     private EditText etDeviceType;
     private EditText etDeviceBrandModel;
 
-    // AÑADIDO: Nuevos campos para el cliente
     private EditText etClientName;
     private EditText etClientEmail;
 
@@ -67,7 +67,6 @@ public class EnrollmentActivity extends AppCompatActivity {
         etDeviceType = findViewById(R.id.et_device_type);
         etDeviceBrandModel = findViewById(R.id.et_device_brand_model);
 
-        // AÑADIDO: Inicializar los nuevos campos del cliente
         etClientName = findViewById(R.id.et_client_name);
         etClientEmail = findViewById(R.id.et_client_email);
 
@@ -139,12 +138,9 @@ public class EnrollmentActivity extends AppCompatActivity {
         String serialText = etSerialNumber.getText().toString().trim();
         String typeText = etDeviceType.getText().toString().trim();
         String brandModelText = etDeviceBrandModel.getText().toString().trim();
-
-        // AÑADIDO: Obtener los datos del cliente
         String clientName = etClientName.getText().toString().trim();
         String clientEmail = etClientEmail.getText().toString().trim();
 
-        // AÑADIDO: Lógica de validación para los nuevos campos
         if (serialText.isEmpty() || typeText.isEmpty() || brandModelText.isEmpty() || clientName.isEmpty() || clientEmail.isEmpty()) {
             Toast.makeText(this, "Todos los campos son obligatorios.", Toast.LENGTH_SHORT).show();
             return;
@@ -161,21 +157,43 @@ public class EnrollmentActivity extends AppCompatActivity {
             modelName = parts[1];
         }
 
+        final String finalBrand = brand;
+        final String finalModelName = modelName;
+
+        // Se añade el listener para obtener el token de Firebase antes de enviar los datos.
+        FirebaseMessaging.getInstance().getToken()
+                .addOnCompleteListener(task -> {
+                    if (!task.isSuccessful()) {
+                        Log.w(TAG, "Fetching FCM registration token failed", task.getException());
+                        // En caso de fallo, se continúa el proceso sin el token.
+                        sendDataWithFcmToken(null, serialText, typeText, finalBrand, finalModelName, clientName, clientEmail);
+                        return;
+                    }
+                    String fcmToken = task.getResult();
+                    Log.d(TAG, "FCM Token obtenido: " + fcmToken);
+                    // Se llama a la función de envío de datos una vez que se tiene el token.
+                    sendDataWithFcmToken(fcmToken, serialText, typeText, finalBrand, finalModelName, clientName, clientEmail);
+                });
+    }
+
+    private void sendDataWithFcmToken(String fcmToken, String serialText, String typeText, String brand, String modelName, String clientName, String clientEmail) {
         try {
             JSONObject deviceData = new JSONObject();
-            // deviceData.put("device_id", UUID.randomUUID().toString()); // ELIMINE ESTA LÍNEA
             deviceData.put("serial_number", serialText);
             deviceData.put("device_type", typeText);
             deviceData.put("brand", brand);
             deviceData.put("model_name", modelName);
             deviceData.put("imei", getImei());
 
-            // AÑADIDO: Incluir la información del cliente
+            if (fcmToken != null) {
+                // Se añade el token de FCM solo si se obtuvo correctamente.
+                deviceData.put("fcm_token", fcmToken);
+            }
+
             deviceData.put("client_name", clientName);
             deviceData.put("client_email", clientEmail);
-            deviceData.put("contact_phone", ""); // Es posible que su app envíe el número del cliente aquí
+            deviceData.put("contact_phone", "");
 
-            // AÑADIDO: Campos adicionales para compatibilidad con el serializador
             deviceData.put("company_logo_url", "");
             deviceData.put("unlock_code", "");
             deviceData.put("message", "");
@@ -243,7 +261,6 @@ public class EnrollmentActivity extends AppCompatActivity {
                 }
             }
         } catch (Exception e) {
-            // Si el dispositivo no tiene un IMEI o lanza una excepción, devuelve 'unknown'
             Log.e(TAG, "Error al obtener IMEI: " + e.getMessage());
         }
         return imei != null ? imei : "unknown";
