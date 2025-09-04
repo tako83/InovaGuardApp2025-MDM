@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "605938684075",
+    "project_id": "inovag-4627e",
+    "storage_bucket": "inovag-4627e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:605938684075:android:e42a4058ce534ee87c27ee",
+        "android_client_info": {
+          "package_name": "com.inova.guard.mdm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCRZ1A8H5lcBgIvXjeQcer0Jz_3-1xr2gE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

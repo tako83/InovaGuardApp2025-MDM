@@ -3,6 +3,7 @@ package com.inova.guard.mdm.utils;
 import android.content.Context;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -36,7 +37,7 @@ public class ApiUtils {
         Request request = new Request.Builder().url(url).post(body).build();
         client.newCall(request).enqueue(new Callback() {
             @Override
-            public void onResponse(Call call, Response response) throws IOException {
+            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
                 if (response.isSuccessful() && response.body() != null) {
                     callback.onSuccess(response.body().string());
                 } else {
@@ -45,7 +46,7 @@ public class ApiUtils {
             }
 
             @Override
-            public void onFailure(Call call, IOException e) {
+            public void onFailure(@NonNull Call call, @NonNull IOException e) {
                 callback.onFailure("Fallo de red: " + e.getMessage());
             }
         });
@@ -56,7 +57,7 @@ public class ApiUtils {
         Request request = new Request.Builder().url(url).get().build();
         client.newCall(request).enqueue(new Callback() {
             @Override
-            public void onResponse(Call call, Response response) throws IOException {
+            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
                 if (response.isSuccessful() && response.body() != null) {
                     callback.onSuccess(response.body().string());
                 } else {
@@ -65,7 +66,7 @@ public class ApiUtils {
             }
 
             @Override
-            public void onFailure(Call call, IOException e) {
+            public void onFailure(@NonNull Call call, @NonNull IOException e) {
                 callback.onFailure("Fallo de red: " + e.getMessage());
             }
         });
@@ -83,7 +84,7 @@ public class ApiUtils {
         Request request = new Request.Builder().url(url).post(body).build();
         client.newCall(request).enqueue(new Callback() {
             @Override
-            public void onResponse(Call call, Response response) throws IOException {
+            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
                 if (response.isSuccessful() && response.body() != null) {
                     callback.onSuccess(response.body().string());
                 } else {
@@ -92,7 +93,7 @@ public class ApiUtils {
             }
 
             @Override
-            public void onFailure(Call call, IOException e) {
+            public void onFailure(@NonNull Call call, @NonNull IOException e) {
                 callback.onFailure("Fallo de red: " + e.getMessage());
             }
         });
@@ -110,7 +111,7 @@ public class ApiUtils {
         Request request = new Request.Builder().url(url).post(body).build();
         client.newCall(request).enqueue(new Callback() {
             @Override
-            public void onResponse(Call call, Response response) throws IOException {
+            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
                 if (response.isSuccessful() && response.body() != null) {
                     callback.onSuccess(response.body().string());
                 } else {
@@ -119,19 +120,18 @@ public class ApiUtils {
             }
 
             @Override
-            public void onFailure(Call call, IOException e) {
+            public void onFailure(@NonNull Call call, @NonNull IOException e) {
                 callback.onFailure("Fallo de red: " + e.getMessage());
             }
         });
     }
 
-    // Nuevo método para notificar al servidor cuando los permisos de administrador son desactivados
     public static void notifyAdminDisabled(Context context, String serialNumber, ApiCallback callback) {
         String url = getBaseUrl() + "/api/notify-admin-disabled/" + serialNumber + "/";
         Request request = new Request.Builder().url(url).get().build();
         client.newCall(request).enqueue(new Callback() {
             @Override
-            public void onResponse(Call call, Response response) throws IOException {
+            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
                 if (response.isSuccessful() && response.body() != null) {
                     callback.onSuccess(response.body().string());
                 } else {
@@ -140,8 +140,39 @@ public class ApiUtils {
             }
 
             @Override
-            public void onFailure(Call call, IOException e) {
+            public void onFailure(@NonNull Call call, @NonNull IOException e) {
                 callback.onFailure("Fallo de red al notificar: " + e.getMessage());
+            }
+        });
+    }
+
+    // Nuevo método para enviar la ubicación
+    public static void sendLocation(Context context, String serialNumber, double latitude, double longitude, final ApiCallback callback) {
+        String url = getBaseUrl() + "/api/location_update/";
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("serial_number", serialNumber);
+            payload.put("latitude", latitude);
+            payload.put("longitude", longitude);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+
+        RequestBody body = RequestBody.create(JSON, payload.toString());
+        Request request = new Request.Builder().url(url).post(body).build();
+        client.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
+                if (response.isSuccessful() && response.body() != null) {
+                    callback.onSuccess(response.body().string());
+                } else {
+                    callback.onFailure("Error al enviar la ubicación: " + response.code());
+                }
+            }
+
+            @Override
+            public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                callback.onFailure("Fallo de red al enviar ubicación: " + e.getMessage());
             }
         });
     }

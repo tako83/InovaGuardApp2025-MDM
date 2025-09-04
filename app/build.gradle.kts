@@ -1,5 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
+    // AÑADE ESTA LÍNEA CORREGIDA AQUÍ
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -39,9 +41,14 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
+    implementation("com.airbnb.android:lottie:6.0.0")
 
     implementation(libs.okhttp)
     implementation(libs.glide)
     annotationProcessor(libs.glide.compiler)
     implementation("com.google.android.gms:play-services-location:21.0.1")
+
+    // AÑADE ESTAS LÍNEAS AQUÍ para Firebase Messaging
+    implementation(platform("com.google.firebase:firebase-bom:34.2.0"))
+    implementation("com.google.firebase:firebase-messaging")
 }

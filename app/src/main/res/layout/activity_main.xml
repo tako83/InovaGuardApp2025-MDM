@@ -13,6 +13,7 @@
         android:layout_height="wrap_content"
         android:padding="24dp">
 
+        <!-- Diseño para la pantalla bloqueada -->
         <LinearLayout
             android:id="@+id/locked_layout"
             android:layout_width="0dp"
@@ -105,6 +106,7 @@
 
         </LinearLayout>
 
+        <!-- Diseño para la pantalla principal (no bloqueada) -->
         <LinearLayout
             android:id="@+id/main_layout"
             android:layout_width="0dp"
@@ -281,6 +283,44 @@
                 android:textSize="14sp" />
 
         </LinearLayout>
+
+        <!-- Panel de Administración (oculto por defecto) -->
+        <LinearLayout
+            android:id="@+id/admin_panel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="24dp"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintWidth_max="400dp"
+            app:layout_constraintVertical_bias="0.5">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Panel de Administración"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:textColor="@android:color/white"
+                android:layout_marginBottom="24dp"/>
+
+            <Button
+                android:id="@+id/clear_device_owner_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Desvincular Dispositivo"
+                android:background="@drawable/rounded_red_button"
+                android:textColor="@android:color/white"
+                android:textStyle="bold"
+                android:padding="12dp"/>
+
+        </LinearLayout>
+
     </androidx.constraintlayout.widget.ConstraintLayout>
 
 </ScrollView>

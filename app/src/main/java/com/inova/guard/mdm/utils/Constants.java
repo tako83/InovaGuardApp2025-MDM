@@ -30,10 +30,12 @@ public class Constants {
     public static final String PREF_MESSAGE = "message";
     public static final String PREF_COMPANY_LOGO_URL = "companyLogoUrl";
 
+    // --- NUEVA CONSTANTE PARA EL CÓDIGO DE DESBLOQUEO ---
+    public static final String PREF_UNLOCK_CODE = "unlock_code";
+
     public static final long CONNECTION_CHECK_INTERVAL = 15 * 60 * 1000;
     public static final long LOCK_THRESHOLD_MINUTES = 60 * 24 * 7;
 
     public static final int PAYMENT_REMINDER_THRESHOLD_DAYS = 5;
     public static final String EXTRA_SHOW_PAYMENT_REMINDER = "showPaymentReminder";
-
 }
