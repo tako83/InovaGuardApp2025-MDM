@@ -19,6 +19,10 @@ public class Constants {
     public static final String PREF_DEVICE_ID = "deviceId";
     public static final String PREF_SERIAL_NUMBER = "serialNumber";
     public static final String PREF_IS_LOCKED = "isLocked";
+
+    public static final String PREF_HAS_PENDING_REMINDER = "has_pending_reminder";
+    public static final String PREF_REMINDER_TITLE = "reminder_title";
+    public static final String PREF_REMINDER_MESSAGE = "reminder_message";
     public static final String PREF_CONTACT_PHONE = "contactPhone";
     public static final String PREF_LAST_UNLOCK_CODE = "lastUnlockCode";
     public static final String PREF_NEXT_PAYMENT_DATE = "nextPaymentDate";

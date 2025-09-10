@@ -11,6 +11,7 @@
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <uses-feature
         android:name="android.hardware.touchscreen"
@@ -44,7 +45,6 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Este intent-filter es crucial para la integración con el aprovisionamiento de Device Owner -->
             <intent-filter>
                 <action android:name="android.app.action.PROVISION_MANAGED_DEVICE" />
             </intent-filter>
@@ -74,8 +74,8 @@
                 <action android:name="android.app.action.DEVICE_ADMIN_DISABLED" />
                 <action android:name="android.app.action.LOCK_TASK_MODE_ENTERING" />
                 <action android:name="android.app.action.LOCK_TASK_MODE_EXITING" />
-                <!-- Nuevo action para el aprovisionamiento completo -->
                 <action android:name="android.app.action.PROFILE_PROVISIONING_COMPLETE" />
+                <category android:name="android.intent.category.PROVISIONING_DEVICE_ADMIN" />
             </intent-filter>
         </receiver>
 
@@ -101,6 +101,11 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <service
+            android:name=".service.ReminderOverlayService"
+            android:enabled="true"
+            android:exported="false" />
 
     </application>
 

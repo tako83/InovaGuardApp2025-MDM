@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#1E2741"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="32dp">
+
+    <ImageView
+        android:id="@+id/logo_image_view"
+        android:layout_width="180dp"
+        android:layout_height="72dp"
+        android:layout_marginBottom="32dp"
+        android:contentDescription="InovaGuard Logo"
+        android:src="@drawable/inova_guard_logo" />
+
+    <TextView
+        android:id="@+id/locked_message_text_view"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:text="Dispositivo bloqueado por falta de pago"
+        android:textAlignment="center"
+        android:textColor="@android:color/white"
+        android:textSize="28sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/incorrect_code_text_view"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="Código incorrecto. Intenta de nuevo."
+        android:textAlignment="center"
+        android:textColor="#FF4D4D"
+        android:textSize="18sp"
+        android:visibility="gone" />
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:layout_width="350dp"
+        android:layout_height="wrap_content"
+        android:hint="Código de Desbloqueo"
+        android:textColorHint="#999999"
+        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/unlock_code_edit_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@android:color/white"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:inputType="number"
+            android:maxLines="1"
+            android:textColor="@android:color/black" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <Button
+        android:id="@+id/unlock_button"
+        android:layout_width="350dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:background="@drawable/rounded_purple_button"
+        android:padding="12dp"
+        android:text="DESBLOQUEAR DISPOSITIVO"
+        android:textColor="@android:color/white"
+        android:textStyle="bold"
+        android:focusable="true" />
+
+    <TextView
+        android:id="@+id/contact_phone_text_view"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="Teléfono: N/A"
+        android:textColor="#CCCCCC"
+        android:textSize="18sp"
+        android:textAlignment="center" />
+</LinearLayout>

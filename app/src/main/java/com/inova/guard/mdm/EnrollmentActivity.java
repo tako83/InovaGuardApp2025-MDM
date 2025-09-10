@@ -23,6 +23,7 @@ import androidx.core.content.ContextCompat;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.inova.guard.mdm.admin.DeviceAdminReceiver;
 import com.inova.guard.mdm.service.MdmService;
+import com.inova.guard.mdm.service.MyFirebaseMessagingService;
 import com.inova.guard.mdm.utils.ApiUtils;
 import com.inova.guard.mdm.utils.Constants;
 
@@ -48,6 +49,7 @@ public class EnrollmentActivity extends AppCompatActivity {
     private EditText etDeviceType;
     private EditText etDeviceBrandModel;
 
+    // AÑADIDO: Nuevos campos para el cliente
     private EditText etClientName;
     private EditText etClientEmail;
 
@@ -67,60 +69,15 @@ public class EnrollmentActivity extends AppCompatActivity {
         etDeviceType = findViewById(R.id.et_device_type);
         etDeviceBrandModel = findViewById(R.id.et_device_brand_model);
 
+        // AÑADIDO: Inicializar los nuevos campos del cliente
         etClientName = findViewById(R.id.et_client_name);
         etClientEmail = findViewById(R.id.et_client_email);
-
-        // --- INICIO: Lógica para manejar datos de enrolamiento por QR ---
-        handleProvisioningExtras(getIntent());
-        // --- FIN: Lógica para manejar datos de enrolamiento por QR ---
 
         checkPermissionsAndAdminStatus();
 
         btnActivateAdmin.setOnClickListener(v -> activateDeviceAdmin());
         btnEnroll.setOnClickListener(v -> attemptEnrollment());
     }
-
-    /**
-     * Revisa si el Intent tiene datos de aprovisionamiento de un código QR.
-     * Si los encuentra, rellena los campos de la UI y los deshabilita para evitar edición.
-     */
-    private void handleProvisioningExtras(Intent intent) {
-        if (intent != null && intent.hasExtra(DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE)) {
-            Bundle extras = intent.getBundleExtra(DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE);
-            if (extras != null) {
-                String serial = extras.getString("serial_number");
-                String deviceType = extras.getString("device_type");
-                String clientName = extras.getString("client_name");
-                String clientEmail = extras.getString("client_email");
-                String deviceBrandModel = extras.getString("device_brand_model");
-
-                // Llenar los campos de la UI con los datos obtenidos
-                if (serial != null) {
-                    etSerialNumber.setText(serial);
-                    etSerialNumber.setEnabled(false); // Deshabilitar para que el usuario no edite
-                }
-                if (deviceType != null) {
-                    etDeviceType.setText(deviceType);
-                    etDeviceType.setEnabled(false);
-                }
-                if (clientName != null) {
-                    etClientName.setText(clientName);
-                    etClientName.setEnabled(false);
-                }
-                if (clientEmail != null) {
-                    etClientEmail.setText(clientEmail);
-                    etClientEmail.setEnabled(false);
-                }
-                if (deviceBrandModel != null) {
-                    etDeviceBrandModel.setText(deviceBrandModel);
-                    etDeviceBrandModel.setEnabled(false);
-                }
-
-                Toast.makeText(this, "Datos precargados desde el código QR. Por favor, revisa y confirma.", Toast.LENGTH_LONG).show();
-            }
-        }
-    }
-
 
     private void checkPermissionsAndAdminStatus() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
@@ -184,6 +141,7 @@ public class EnrollmentActivity extends AppCompatActivity {
         String serialText = etSerialNumber.getText().toString().trim();
         String typeText = etDeviceType.getText().toString().trim();
         String brandModelText = etDeviceBrandModel.getText().toString().trim();
+
         String clientName = etClientName.getText().toString().trim();
         String clientEmail = etClientEmail.getText().toString().trim();
 
@@ -203,23 +161,6 @@ public class EnrollmentActivity extends AppCompatActivity {
             modelName = parts[1];
         }
 
-        final String finalBrand = brand;
-        final String finalModelName = modelName;
-
-        FirebaseMessaging.getInstance().getToken()
-                .addOnCompleteListener(task -> {
-                    if (!task.isSuccessful()) {
-                        Log.w(TAG, "Fetching FCM registration token failed", task.getException());
-                        sendDataWithFcmToken(null, serialText, typeText, finalBrand, finalModelName, clientName, clientEmail);
-                        return;
-                    }
-                    String fcmToken = task.getResult();
-                    Log.d(TAG, "FCM Token obtenido: " + fcmToken);
-                    sendDataWithFcmToken(fcmToken, serialText, typeText, finalBrand, finalModelName, clientName, clientEmail);
-                });
-    }
-
-    private void sendDataWithFcmToken(String fcmToken, String serialText, String typeText, String brand, String modelName, String clientName, String clientEmail) {
         try {
             JSONObject deviceData = new JSONObject();
             deviceData.put("serial_number", serialText);
@@ -227,10 +168,6 @@ public class EnrollmentActivity extends AppCompatActivity {
             deviceData.put("brand", brand);
             deviceData.put("model_name", modelName);
             deviceData.put("imei", getImei());
-
-            if (fcmToken != null) {
-                deviceData.put("fcm_token", fcmToken);
-            }
 
             deviceData.put("client_name", clientName);
             deviceData.put("client_email", clientEmail);
@@ -263,11 +200,45 @@ public class EnrollmentActivity extends AppCompatActivity {
                                     .putString(Constants.PREF_CONTACT_PHONE, contactPhone)
                                     .apply();
 
-                            Intent serviceIntent = new Intent(EnrollmentActivity.this, MdmService.class);
-                            startService(serviceIntent);
+                            FirebaseMessaging.getInstance().getToken()
+                                    .addOnCompleteListener(task -> {
+                                        if (!task.isSuccessful()) {
+                                            Log.w(TAG, "Fetching FCM registration token failed", task.getException());
+                                            return;
+                                        }
+                                        String token = task.getResult();
+                                        MyFirebaseMessagingService.sendRegistrationTokenToServer(EnrollmentActivity.this, token);
+                                    });
 
+                            // INICIO DE AJUSTES QUIRÚRGICOS
+                            // Ahora se inicia el modo kiosco y los servicios, ya que el dispositivo está enrolado.
+
+                            // Iniciar el servicio MDM
+                            Intent mdmServiceIntent = new Intent(EnrollmentActivity.this, MdmService.class);
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                startForegroundService(mdmServiceIntent);
+                            } else {
+                                startService(mdmServiceIntent);
+                            }
+
+                            // Iniciar el servicio de Firebase
+                            Intent firebaseServiceIntent = new Intent(EnrollmentActivity.this, MyFirebaseMessagingService.class);
+                            startService(firebaseServiceIntent);
+
+                            // Aplicar la política de modo kiosco
+                            DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+                            ComponentName adminComponent = new ComponentName(EnrollmentActivity.this, DeviceAdminReceiver.class);
+                            String[] allowedPackages = {getPackageName()};
+                            if (dpm.isAdminActive(adminComponent)) {
+                                dpm.setLockTaskPackages(adminComponent, allowedPackages);
+                            }
+
+                            // Iniciar la MainActivity para que se active el modo kiosco
                             Intent mainIntent = new Intent(EnrollmentActivity.this, MainActivity.class);
+                            mainIntent.putExtra("start_kiosk_mode", true);
                             startActivity(mainIntent);
+                            // FIN DE AJUSTES QUIRÚRGICOS
+
                             finish();
                         }
                     } catch (JSONException e) {

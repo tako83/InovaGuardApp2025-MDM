@@ -5,7 +5,14 @@
         <limit-password />
         <wipe-data />
         <disable-camera />
-        <disable-uninstallation />
+        <disable-uninstall />
         <lock-task-mode />
+        <add-user />
+        <disable-usb-data />
+        <factory-reset />
+        <date-time />
+        <debugging-features />
+        <modify-accounts />
+        <install-unknown-sources />
     </uses-policies>
 </device-admin>

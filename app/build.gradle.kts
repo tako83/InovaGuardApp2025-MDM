@@ -49,6 +49,6 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.0.1")
 
     // AÑADE ESTAS LÍNEAS AQUÍ para Firebase Messaging
-    implementation(platform("com.google.firebase:firebase-bom:34.2.0"))
+    implementation(platform("com.google.firebase:firebase-bom:33.0.0")) // Versión corregida
     implementation("com.google.firebase:firebase-messaging")
 }
