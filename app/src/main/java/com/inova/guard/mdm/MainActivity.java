@@ -7,9 +7,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.UserManager; // Se añadió esta importación
+import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -21,13 +23,14 @@ import android.widget.Toast;
 import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 
+// Nuevas importaciones para los permisos de ubicación
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import androidx.core.content.ContextCompat;
 
-import com.google.firebase.messaging.FirebaseMessaging;
+
 import com.bumptech.glide.Glide;
 import com.inova.guard.mdm.admin.DeviceAdminReceiver;
 import com.inova.guard.mdm.service.MdmService;
@@ -53,7 +56,6 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
     private static final int REQUEST_CODE_ENABLE_ADMIN = 1;
-    private static final String ADMIN_MODE_CODE = "251983";
     private View lockedLayout;
     private ImageView logoImageView;
     private TextView lockedMessageTextView;
@@ -69,8 +71,6 @@ public class MainActivity extends AppCompatActivity {
     private TextView paymentInstructionsTextView;
     private Button contactAdminButton;
     private TextView contactPhoneMainTextView;
-    private View adminPanel;
-    private Button clearDeviceOwnerButton;
     private DevicePolicyManager devicePolicyManager;
     private ComponentName adminComponentName;
     private SharedPreferences sharedPreferences;
@@ -78,6 +78,7 @@ public class MainActivity extends AppCompatActivity {
     private Runnable checkConnectionRunnable;
     private ScreenReceiver screenReceiver;
 
+    // Declaración del lanzador de permisos
     private ActivityResultLauncher<String[]> locationPermissionLauncher;
 
     @Override
@@ -113,9 +114,6 @@ public class MainActivity extends AppCompatActivity {
         paymentInstructionsTextView = findViewById(R.id.payment_instructions_text_view);
         contactAdminButton = findViewById(R.id.contact_admin_button);
         contactPhoneMainTextView = findViewById(R.id.contact_phone_main_text_view);
-
-        adminPanel = findViewById(R.id.admin_panel);
-        clearDeviceOwnerButton = findViewById(R.id.clear_device_owner_button);
 
         devicePolicyManager = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
         adminComponentName = new ComponentName(this, DeviceAdminReceiver.class);
@@ -162,82 +160,74 @@ public class MainActivity extends AppCompatActivity {
             Log.w(TAG, "Device Admin is not active. App may be easily uninstalled.");
         }
 
-        OnBackPressedCallback callback = new OnBackPressedCallback(true) {
+        if (isDeviceOwner()) {
+            Log.d(TAG, "Running in Device Owner mode. App can be set as Kiosk.");
+            devicePolicyManager.setLockTaskPackages(adminComponentName, new String[]{getPackageName()});
+        }
+
+        // Se reemplaza `onBackPressed` con el nuevo `OnBackPressedDispatcher`
+        OnBackPressedCallback callback = new OnBackPressedCallback(true /* enabled */) {
             @Override
             public void handleOnBackPressed() {
-                if (isDeviceOwner() && sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false)) {
+                if (sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false)) {
+                    // Si el dispositivo está bloqueado, se consume el evento y se muestra un Toast.
                     Toast.makeText(MainActivity.this, "El dispositivo está bloqueado. Contacte a la administración.", Toast.LENGTH_SHORT).show();
+                } else {
+                    // Si no está bloqueado, se desactiva el callback y se permite el comportamiento por defecto.
+                    this.setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                    this.setEnabled(true);
                 }
             }
         };
         getOnBackPressedDispatcher().addCallback(this, callback);
 
+        // Inicializa el lanzador de permisos
         locationPermissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestMultiplePermissions(),
                 result -> {
                     Boolean fineLocationGranted = result.getOrDefault(
                             Manifest.permission.ACCESS_FINE_LOCATION, false);
                     Boolean coarseLocationGranted = result.getOrDefault(
-                            Manifest.permission.ACCESS_COARSE_LOCATION, false);
-                    if (Boolean.TRUE.equals(fineLocationGranted) && Boolean.TRUE.equals(coarseLocationGranted)) {
-                        Toast.makeText(this, "Permisos de ubicación concedidos.", Toast.LENGTH_SHORT).show();
-                    } else if (Boolean.TRUE.equals(coarseLocationGranted)) {
-                        Toast.makeText(this, "Solo permiso de ubicación aproximada concedido.", Toast.LENGTH_SHORT).show();
+                            Manifest.permission.ACCESS_COARSE_LOCATION,false);
+                    if (fineLocationGranted != null && fineLocationGranted) {
+                        // Permiso de ubicación precisa concedido
+                        Toast.makeText(this, "Permiso de ubicación concedido.", Toast.LENGTH_SHORT).show();
+                    } else if (coarseLocationGranted != null && coarseLocationGranted) {
+                        // Solo permiso de ubicación aproximada concedido
+                        Toast.makeText(this, "Permiso de ubicación aproximada concedido.", Toast.LENGTH_SHORT).show();
                     } else {
+                        // Permisos denegados, puedes mostrar un mensaje al usuario
                         Toast.makeText(this, "Permisos de ubicación denegados.", Toast.LENGTH_SHORT).show();
                     }
                 });
 
+        // Llama al método para solicitar los permisos
         requestLocationPermissions();
-        getAndSendFCMToken();
-        clearDeviceOwnerButton.setOnClickListener(v -> clearDeviceOwner());
     }
 
     private void requestLocationPermissions() {
-        boolean fineLocationPermissionGranted = ContextCompat.checkSelfPermission(
+        boolean fineLocationPermission = ContextCompat.checkSelfPermission(
                 this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
-        boolean coarseLocationPermissionGranted = ContextCompat.checkSelfPermission(
+
+        boolean coarseLocationPermission = ContextCompat.checkSelfPermission(
                 this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
-        if (!fineLocationPermissionGranted || !coarseLocationPermissionGranted) {
+
+        if (!fineLocationPermission || !coarseLocationPermission) {
+            // Los permisos no han sido concedidos, los solicitamos
             locationPermissionLauncher.launch(new String[]{
                     Manifest.permission.ACCESS_FINE_LOCATION,
                     Manifest.permission.ACCESS_COARSE_LOCATION
             });
         } else {
+            // Los permisos ya están concedidos
             Log.d(TAG, "Permisos de ubicación ya están concedidos.");
-        }
-    }
-
-    private void enforceDevicePolicies() {
-        if (isDeviceOwner()) {
-            DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
-            ComponentName adminComponent = new ComponentName(this, DeviceAdminReceiver.class);
-            dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_DEBUGGING_FEATURES);
-            dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_MODIFY_ACCOUNTS);
-            dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_ADD_USER);
-            dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES);
-            dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_USB_FILE_TRANSFER);
-            dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_FACTORY_RESET);
-            dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_CONFIG_DATE_TIME);
         }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-
-        // Verificación de seguridad clave
-        if (!isDeviceOwner()) {
-            Log.e(TAG, "Device Owner status lost. Redirecting to Enrollment.");
-            Intent enrollmentIntent = new Intent(this, EnrollmentActivity.class);
-            startActivity(enrollmentIntent);
-            finish();
-            return;
-        }
-
-        // Método para re-aplicar políticas (código de un mensaje anterior)
-        enforceDevicePolicies();
-
         checkDeviceStatus();
         handler.post(checkConnectionRunnable);
         screenReceiver = new ScreenReceiver();
@@ -259,67 +249,22 @@ public class MainActivity extends AppCompatActivity {
         if (isLocked) {
             lockedLayout.setVisibility(View.VISIBLE);
             mainLayout.setVisibility(View.GONE);
-            adminPanel.setVisibility(View.GONE);
             Glide.with(this).load(R.drawable.inova_guard_logo).into(logoImageView);
+            if (isDeviceOwner()) {
+                startLockTask();
+            }
         } else {
             lockedLayout.setVisibility(View.GONE);
             mainLayout.setVisibility(View.VISIBLE);
-            adminPanel.setVisibility(View.GONE);
-        }
-    }
-
-    private void getAndSendFCMToken() {
-        FirebaseMessaging.getInstance().getToken()
-                .addOnCompleteListener(task -> {
-                    if (!task.isSuccessful()) {
-                        Log.w(TAG, "Fetching FCM registration token failed", task.getException());
-                        return;
-                    }
-                    String token = task.getResult();
-                    Log.d(TAG, "FCM Token: " + token);
-                    sendTokenToServer(token);
-                });
-    }
-
-    private void sendTokenToServer(String token) {
-        String serverUrl = "https://tu-backend.com/api/register-device";
-        OkHttpClient client = new OkHttpClient();
-        MediaType JSON = MediaType.get("application/json; charset=utf-8");
-        JSONObject jsonBody = new JSONObject();
-        try {
-            jsonBody.put("fcmToken", token);
-            String deviceId = sharedPreferences.getString(Constants.PREF_DEVICE_ID, "N/A");
-            jsonBody.put("deviceId", deviceId);
-        } catch (JSONException e) {
-            Log.e(TAG, "Error al crear el JSON para enviar el token", e);
-            return;
-        }
-        RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
-        Request request = new Request.Builder()
-                .url(serverUrl)
-                .post(body)
-                .build();
-        client.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(Call call, IOException e) {
-                Log.e(TAG, "Error al enviar el token al servidor", e);
+            if (isDeviceOwner()) {
+                stopLockTask();
             }
-            @Override
-            public void onResponse(Call call, Response response) throws IOException {
-                if (response.isSuccessful()) {
-                    Log.d(TAG, "Token de FCM enviado exitosamente al servidor.");
-                } else {
-                    Log.e(TAG, "Error en la respuesta del servidor: " + response.code());
-                }
-                response.close();
-            }
-        });
+        }
     }
 
     private void checkDeviceStatus() {
         boolean isDeviceLocked = sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false);
         showScreen(isDeviceLocked);
-        handleKioskMode(isDeviceLocked);
         if (isDeviceLocked) {
             String contactNumber = sharedPreferences.getString(Constants.PREF_CONTACT_PHONE, "+58 412 1234567");
             contactPhoneTextView.setText("Teléfono: " + contactNumber);
@@ -327,18 +272,6 @@ public class MainActivity extends AppCompatActivity {
             unlockCodeEditText.setText("");
         } else {
             updatePaymentInfo();
-        }
-    }
-
-    private void handleKioskMode(boolean isLocked) {
-        if (isDeviceOwner()) {
-            if (isLocked) {
-                Log.d(TAG, "Activando modo Kiosk (Lock Task Mode)");
-                startLockTask();
-            } else {
-                Log.d(TAG, "Desactivando modo Kiosk (Lock Task Mode)");
-                stopLockTask();
-            }
         }
     }
 
@@ -361,59 +294,60 @@ public class MainActivity extends AppCompatActivity {
 
     private void attemptUnlock() {
         String enteredCode = unlockCodeEditText.getText().toString().trim();
-        if (enteredCode.equals(ADMIN_MODE_CODE) && isDeviceOwner()) {
-            unlockCodeEditText.setText("");
-            showAdminPanel();
-            return;
-        }
         if (enteredCode.isEmpty()) {
             incorrectCodeTextView.setText("Por favor, introduce el código.");
             incorrectCodeTextView.setVisibility(View.VISIBLE);
             return;
         }
-        String storedUnlockCode = sharedPreferences.getString(Constants.PREF_UNLOCK_CODE, "");
-        if (enteredCode.equals(storedUnlockCode)) {
-            sharedPreferences.edit().putBoolean(Constants.PREF_IS_LOCKED, false).apply();
-            runOnUiThread(() -> {
-                unlockDevice();
-                Toast.makeText(MainActivity.this, "Dispositivo desbloqueado correctamente.", Toast.LENGTH_SHORT).show();
-                incorrectCodeTextView.setVisibility(View.GONE);
-            });
-        } else {
-            runOnUiThread(() -> {
-                incorrectCodeTextView.setText("Código de desbloqueo incorrecto.");
-                incorrectCodeTextView.setVisibility(View.VISIBLE);
-            });
-        }
-    }
 
-    private void showAdminPanel() {
-        lockedLayout.setVisibility(View.GONE);
-        mainLayout.setVisibility(View.GONE);
-        adminPanel.setVisibility(View.VISIBLE);
-        Toast.makeText(this, "Modo de administración activado.", Toast.LENGTH_SHORT).show();
-    }
+        String serialNumber = sharedPreferences.getString(Constants.PREF_SERIAL_NUMBER, "unknown");
 
-    private void clearDeviceOwner() {
-        if (isDeviceOwner()) {
-            devicePolicyManager.clearDeviceOwnerApp(getPackageName());
-            Toast.makeText(this, "Dispositivo desvinculado del modo Device Owner. La aplicación se puede desinstalar.", Toast.LENGTH_LONG).show();
-            Intent intent = new Intent(Intent.ACTION_DELETE);
-            intent.setData(android.net.Uri.fromParts("package", getPackageName(), null));
-            startActivity(intent);
-        }
+        ApiUtils.verifyUnlockCode(this, serialNumber, enteredCode, new ApiUtils.ApiCallback() {
+            @Override
+            public void onSuccess(String response) {
+                try {
+                    JSONObject jsonResponse = new JSONObject(response);
+                    boolean success = jsonResponse.getBoolean("success");
+                    String message = jsonResponse.getString("message");
+
+                    if (success) {
+                        sharedPreferences.edit().putBoolean(Constants.PREF_IS_LOCKED, false).apply();
+                        runOnUiThread(() -> {
+                            unlockDevice();
+                            Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
+                            incorrectCodeTextView.setVisibility(View.GONE);
+                        });
+                    } else {
+                        runOnUiThread(() -> {
+                            incorrectCodeTextView.setText(message);
+                            incorrectCodeTextView.setVisibility(View.VISIBLE);
+                        });
+                    }
+                } catch (JSONException e) {
+                    Log.e(TAG, "Error parsing unlock response: " + e.getMessage());
+                    runOnUiThread(() -> {
+                        incorrectCodeTextView.setText("Error en la respuesta del servidor.");
+                        incorrectCodeTextView.setVisibility(View.VISIBLE);
+                    });
+                }
+            }
+
+            @Override
+            public void onFailure(String errorMessage) {
+                Log.e(TAG, "Unlock API call failed: " + errorMessage);
+                runOnUiThread(() -> {
+                    incorrectCodeTextView.setText("Error de conexión al servidor: " + errorMessage);
+                    incorrectCodeTextView.setVisibility(View.VISIBLE);
+                });
+            }
+        });
     }
 
     public void lockDevice() {
         runOnUiThread(() -> {
             sharedPreferences.edit().putBoolean(Constants.PREF_IS_LOCKED, true).apply();
-            sharedPreferences.edit().putString(Constants.PREF_UNLOCK_CODE, "1234").apply();
             showScreen(true);
             Toast.makeText(this, "Dispositivo bloqueado por falta de pago.", Toast.LENGTH_LONG).show();
-            if (isDeviceOwner()) {
-                Log.d(TAG, "Iniciando modo de bloqueo de tarea.");
-                startLockTask();
-            }
         });
     }
 
@@ -422,10 +356,6 @@ public class MainActivity extends AppCompatActivity {
             sharedPreferences.edit().putBoolean(Constants.PREF_IS_LOCKED, false).apply();
             showScreen(false);
             Toast.makeText(this, "Dispositivo desbloqueado.", Toast.LENGTH_LONG).show();
-            if (isDeviceOwner()) {
-                Log.d(TAG, "Deteniendo modo de bloqueo de tarea.");
-                stopLockTask();
-            }
         });
     }
 
@@ -433,6 +363,9 @@ public class MainActivity extends AppCompatActivity {
         return devicePolicyManager != null && devicePolicyManager.isDeviceOwnerApp(getPackageName());
     }
 
+    // ¡¡¡CORRECCIÓN APLICADA AQUÍ!!!
+    // La clase debe ser estática para evitar el error "This inner class should be static"
+    // y prevenir fugas de memoria.
     public static class ScreenReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -441,6 +374,7 @@ public class MainActivity extends AppCompatActivity {
                 boolean isLocked = sharedPreferences.getBoolean(Constants.PREF_IS_LOCKED, false);
                 if (isLocked) {
                     Log.d(TAG, "Screen on event received. Re-enforcing lock.");
+                    // Iniciar la MainActivity para que pueda volver a aplicar el lockTask
                     Intent mainActivityIntent = new Intent(context, MainActivity.class);
                     mainActivityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                     context.startActivity(mainActivityIntent);
