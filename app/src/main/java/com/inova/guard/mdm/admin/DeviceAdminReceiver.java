@@ -5,13 +5,19 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.UserManager;
 import android.util.Log;
 import android.widget.Toast;
+
 import com.inova.guard.mdm.MainActivity;
 import com.inova.guard.mdm.utils.ApiUtils;
 import com.inova.guard.mdm.utils.Constants;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.IOException;
 
@@ -24,6 +30,8 @@ public class DeviceAdminReceiver extends android.app.admin.DeviceAdminReceiver {
 
     private static final String TAG = "DeviceAdminReceiver";
 
+    // NOTA: onEnabled() no es llamado durante el aprovisionamiento con QR.
+    // Su lógica se ha movido a onProfileProvisioningComplete().
     @Override
     public void onEnabled(Context context, Intent intent) {
         super.onEnabled(context, intent);
@@ -90,6 +98,59 @@ public class DeviceAdminReceiver extends android.app.admin.DeviceAdminReceiver {
     public void onProfileProvisioningComplete(Context context, Intent intent) {
         Log.d(TAG, "Provisioning complete. Setting up device policies...");
 
+        // FASE 1: OBTENER LOS DATOS DEL CLIENTE DEL QR Y GUARDARLOS EN SHARED PREFERENCES
+        Bundle provisioningExtras = intent.getBundleExtra(DevicePolicyManager.EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE);
+        if (provisioningExtras != null) {
+            String clientName = provisioningExtras.getString("client_name");
+            String clientEmail = provisioningExtras.getString("client_email");
+            String serialFromQR = provisioningExtras.getString("serial_number");
+
+            SharedPreferences prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE);
+            SharedPreferences.Editor editor = prefs.edit();
+            editor.putString(Constants.PREF_SERIAL_NUMBER, serialFromQR);
+            editor.putString(Constants.PREF_CLIENT_NAME, clientName);
+            editor.putString(Constants.PREF_CLIENT_EMAIL, clientEmail);
+            editor.apply();
+
+            Log.d(TAG, "Datos de aprovisionamiento guardados en SharedPreferences.");
+
+            // AHORA QUE LOS DATOS ESTÁN DISPONIBLES, ENVIAMOS LA INFORMACIÓN AL SERVIDOR
+            try {
+                JSONObject enrollmentData = new JSONObject();
+                enrollmentData.put("client_name", clientName);
+                enrollmentData.put("client_email", clientEmail);
+                enrollmentData.put("serial_number", serialFromQR);
+                enrollmentData.put("device_brand_info", Build.BRAND);
+                enrollmentData.put("device_model_info", Build.MODEL);
+                enrollmentData.put("device_type", "smartphone");
+
+                ApiUtils.enrollDevice(context, enrollmentData, new ApiUtils.ApiCallback() {
+                    @Override
+                    public void onSuccess(String response) {
+                        Log.d(TAG, "Dispositivo registrado con éxito: " + response);
+                        // Limpiar los datos de SharedPreferences después de un enrolamiento exitoso
+                        prefs.edit().remove(Constants.PREF_SERIAL_NUMBER).apply();
+                        prefs.edit().remove(Constants.PREF_CLIENT_NAME).apply();
+                        prefs.edit().remove(Constants.PREF_CLIENT_EMAIL).apply();
+                    }
+                    @Override
+                    public void onFailure(String errorMessage) {
+                        Log.e(TAG, "Fallo al registrar el dispositivo: " + errorMessage);
+                        // El dispositivo seguirá activo, pero la notificación al backend falló.
+                        // El servicio en segundo plano podría intentar reenviarlo.
+                    }
+                });
+
+            } catch (JSONException e) {
+                Log.e(TAG, "Error al crear el objeto JSON para el enrolamiento: " + e.getMessage());
+            }
+
+        } else {
+            Log.e(TAG, "No se encontraron datos de aprovisionamiento. Abortando.");
+            return;
+        }
+
+        // FASE 2: APLICAR POLÍTICAS Y CONFIGURAR EL MODO KIOSCO
         DevicePolicyManager dpm = (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
         ComponentName adminComponent = new ComponentName(context, DeviceAdminReceiver.class);
 
@@ -98,45 +159,23 @@ public class DeviceAdminReceiver extends android.app.admin.DeviceAdminReceiver {
             return;
         }
 
-        // --- Nuevas políticas de seguridad ---
-
-        // 1. Deshabilitar la depuración USB y la transferencia de archivos
         dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_USB_FILE_TRANSFER);
-
-        // 2. Deshabilitar la desinstalación de la app
         dpm.setUninstallBlocked(adminComponent, context.getPackageName(), true);
-
-        // 3. Deshabilitar el restablecimiento de fábrica en los ajustes del sistema
         dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_FACTORY_RESET);
-
-        // 4. DESHABILITAR el cambio de fecha y hora
         dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_CONFIG_DATE_TIME);
-
-        // 5. Impide habilitar la depuración USB
         dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_DEBUGGING_FEATURES);
-
-        // 6. Impide cambiar cuentas
         dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_MODIFY_ACCOUNTS);
-
-        // 7. Impide añadir nuevos usuarios
         dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_ADD_USER);
-
-        // 8. Impide instalar apps de fuentes desconocidas
         dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES);
 
-        // --- Fin de las nuevas políticas de seguridad ---
-
-        // Habilitar el modo kiosco
         String[] allowedPackages = {context.getPackageName()};
         dpm.setLockTaskPackages(adminComponent, allowedPackages);
 
-        // Enviar un Intent a MainActivity para que inicie el modo kiosco
         Intent lockIntent = new Intent(context, MainActivity.class);
         lockIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         lockIntent.putExtra("start_kiosk_mode", true);
         context.startActivity(lockIntent);
 
-        // Iniciar tus servicios (MdmService y Firebase) para la comunicación remota
         Intent mdmServiceIntent = new Intent(context, com.inova.guard.mdm.service.MdmService.class);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             context.startForegroundService(mdmServiceIntent);
