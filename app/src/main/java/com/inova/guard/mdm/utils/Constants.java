@@ -34,6 +34,13 @@ public class Constants {
     public static final String PREF_MESSAGE = "message";
     public static final String PREF_COMPANY_LOGO_URL = "companyLogoUrl";
 
+    // --- NUEVAS CONSTANTES AÑADIDAS PARA LA VERSIÓN DE ENROLAMIENTO ---
+    public static final String PREF_CLIENT_NAME = "client_name";
+    public static final String PREF_CLIENT_EMAIL = "client_email";
+    // ¡IMPORTANTE! Añade esta nueva constante
+    public static final String PREF_PROVISIONING_COMPLETE = "provisioningComplete";
+
+
     // --- NUEVA CONSTANTE PARA EL CÓDIGO DE DESBLOQUEO ---
     public static final String PREF_UNLOCK_CODE = "unlock_code";
 
@@ -42,4 +49,6 @@ public class Constants {
 
     public static final int PAYMENT_REMINDER_THRESHOLD_DAYS = 5;
     public static final String EXTRA_SHOW_PAYMENT_REMINDER = "showPaymentReminder";
+    public static final String PREF_SHOW_PAYMENT_REMINDER = "show_payment_reminder";
+    public static final String PREF_DEVICE_INFO_SENT = "device_info_sent";
 }
